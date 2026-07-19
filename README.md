@@ -33,17 +33,21 @@ Comunicación: `api ↔ ocr-service` por HTTP interno; `api ↔ db` por SQL.
     └── ansible/       # Aprovisionamiento del servidor (IaC)
 ```
 
-## Puesta en marcha
-
-> Aún no implementado. La contenerización (`docker-compose`) llegará en la EPIC 6.
-
-Para la configuración local, copia las variables de entorno de ejemplo:
+## Puesta en marcha (Docker)
 
 ```bash
-cp .env.example .env   # y rellena los valores reales
+cp .env.example .env        # y rellena los valores reales
+docker compose up --build   # levanta db (PostgreSQL), ocr-service y api
 ```
 
+- API en `http://localhost:8000` (Swagger en `/docs`).
+- `db` y `ocr-service` quedan en la red interna (sin puertos al host).
+- La imagen del `ocr-service` incluye Tesseract con español.
+
 El archivo `.env` está en `.gitignore` y **nunca** debe subirse al repositorio.
+
+Para desarrollar un servicio suelto (sin Docker), mira su `README.md`
+(`services/api`, `services/ocr-service`); en ese modo el `api` usa SQLite.
 
 ## Roadmap (fases)
 
