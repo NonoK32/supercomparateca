@@ -13,5 +13,11 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./supercomparateca.db"
     ocr_service_url: str = "http://ocr-service:8001"
 
+    # Secreto JWT: en producción se inyecta por entorno (nunca el valor por
+    # defecto). Genera uno con: openssl rand -hex 32
+    jwt_secret_key: str = "dev-insecure-secret-change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+
 
 settings = Settings()

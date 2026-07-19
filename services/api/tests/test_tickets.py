@@ -24,6 +24,7 @@ def test_subir_ticket_extrae_lineas(client, fake_ocr):
 
     # Escenario de aceptación (§8): al menos una línea con precio y estado pendiente.
     assert ticket["estado"] == "pendiente"
+    assert isinstance(ticket["usuario_id"], int)  # queda asociado al usuario del token
     assert len(ticket["lineas"]) >= 1
 
     textos = [linea["texto_original"] for linea in ticket["lineas"]]

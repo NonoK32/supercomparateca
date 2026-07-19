@@ -1,7 +1,29 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+
+
+# ---- Usuario / Auth ----
+class UsuarioCreate(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+    email: EmailStr
+    # bcrypt usa como máximo los primeros 72 bytes de la contraseña.
+    password: str = Field(min_length=8, max_length=72)
+
+
+class UsuarioRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nombre: str
+    email: EmailStr
+    fecha_registro: datetime
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
 
 # ---- Supermercado ----
@@ -62,6 +84,7 @@ class TicketRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    usuario_id: int
     supermercado_id: int
     fecha_compra: date
     estado: str

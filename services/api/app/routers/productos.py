@@ -5,8 +5,13 @@ from sqlalchemy.orm import Session
 
 from .. import consultas, models, schemas
 from ..database import get_db
+from ..seguridad import get_current_user
 
-router = APIRouter(prefix="/productos", tags=["productos"])
+router = APIRouter(
+    prefix="/productos",
+    tags=["productos"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("", response_model=schemas.ProductoRead, status_code=status.HTTP_201_CREATED)

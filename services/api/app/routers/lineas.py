@@ -4,16 +4,21 @@ from sqlalchemy.orm import Session
 
 from .. import asociacion, models, schemas
 from ..database import get_db
+from ..seguridad import get_current_user
 
 router = APIRouter(prefix="/lineas", tags=["lineas"])
 
 
 @router.post("/{linea_id}/asociar", response_model=schemas.LineaTicketRead)
 def asociar(
-    linea_id: int, payload: schemas.AsociarRequest, db: Session = Depends(get_db)
+    linea_id: int,
+    payload: schemas.AsociarRequest,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user),
 ):
     linea = db.get(models.LineaTicket, linea_id)
-    if linea is None:
+    # 404 también si la línea es de un ticket de otro usuario (no filtra existencia).
+    if linea is None or linea.ticket.usuario_id != usuario.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Línea no encontrada")
 
     if payload.producto_id is not None:

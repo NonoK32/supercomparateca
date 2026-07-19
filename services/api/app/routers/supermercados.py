@@ -5,8 +5,13 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..seguridad import get_current_user
 
-router = APIRouter(prefix="/supermercados", tags=["supermercados"])
+router = APIRouter(
+    prefix="/supermercados",
+    tags=["supermercados"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("", response_model=schemas.SupermercadoRead, status_code=status.HTTP_201_CREATED)

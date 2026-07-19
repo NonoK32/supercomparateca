@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from .. import asociacion, models, parsing, schemas
 from ..database import get_db
 from ..ocr import OCRClient, get_ocr_client
+from ..seguridad import get_current_user
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -18,6 +19,7 @@ def subir(
     fecha_compra: date | None = Form(default=None),
     db: Session = Depends(get_db),
     ocr: OCRClient = Depends(get_ocr_client),
+    usuario: models.Usuario = Depends(get_current_user),
 ):
     supermercado = db.get(models.Supermercado, supermercado_id)
     if supermercado is None:
@@ -35,6 +37,7 @@ def subir(
     # La imagen ya no se necesita: solo persiste el texto extraído.
 
     ticket = models.Ticket(
+        usuario_id=usuario.id,
         supermercado_id=supermercado_id,
         fecha_compra=fecha_compra or date.today(),
         texto_ocr_bruto=texto,
@@ -60,22 +63,40 @@ def subir(
 
 
 @router.get("", response_model=list[schemas.TicketRead])
-def listar(db: Session = Depends(get_db)):
-    return list(db.scalars(select(models.Ticket)).all())
+def listar(
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user),
+):
+    return list(
+        db.scalars(
+            select(models.Ticket).where(models.Ticket.usuario_id == usuario.id)
+        ).all()
+    )
 
 
-@router.get("/{ticket_id}", response_model=schemas.TicketRead)
-def obtener(ticket_id: int, db: Session = Depends(get_db)):
+def _ticket_propio(ticket_id: int, usuario: models.Usuario, db: Session) -> models.Ticket:
+    """Devuelve el ticket si pertenece al usuario; si no, 404 (no filtra existencia)."""
     ticket = db.get(models.Ticket, ticket_id)
-    if ticket is None:
+    if ticket is None or ticket.usuario_id != usuario.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket no encontrado")
     return ticket
 
 
+@router.get("/{ticket_id}", response_model=schemas.TicketRead)
+def obtener(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user),
+):
+    return _ticket_propio(ticket_id, usuario, db)
+
+
 @router.delete("/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar(ticket_id: int, db: Session = Depends(get_db)):
-    ticket = db.get(models.Ticket, ticket_id)
-    if ticket is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket no encontrado")
+def eliminar(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user),
+):
+    ticket = _ticket_propio(ticket_id, usuario, db)
     db.delete(ticket)
     db.commit()

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from .database import Base, engine
-from .routers import lineas, productos, supermercados, tickets
+from .routers import auth, lineas, productos, supermercados, tickets
 
 
 @asynccontextmanager
@@ -22,6 +22,7 @@ def health():
     return {"status": "ok"}
 
 
+app.include_router(auth.router)
 app.include_router(supermercados.router)
 app.include_router(productos.router)
 app.include_router(tickets.router)

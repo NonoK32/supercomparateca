@@ -21,6 +21,12 @@ Se comunica con `ocr-service` por HTTP interno y con `db` (PostgreSQL) por SQL.
 - EPIC 4: consulta de precios — `GET /productos/{id}/precios` (comparativa entre
   supermercados, precio más reciente) y `GET /productos/{id}/historico`
   (evolución temporal, filtrable por `?supermercado_id=`).
+- EPIC 5: autenticación JWT — `POST /auth/registro` y `POST /auth/login`.
+  Todos los demás endpoints requieren token (deny by default). Los tickets son
+  propiedad del usuario del token; ver/borrar un ticket ajeno devuelve 404.
+
+Seguridad: contraseñas con bcrypt, JWT (HS256), secreto vía `JWT_SECRET_KEY`.
+Productos, supermercados y comparativa de precios son datos compartidos (globales).
 
 Variable `OCR_SERVICE_URL` para localizar al `ocr-service` (por defecto
 `http://ocr-service:8001`).
