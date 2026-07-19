@@ -19,5 +19,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
+    # Orígenes permitidos para el frontend (CORS), separados por comas.
+    cors_origins: str = "http://localhost:8080,http://127.0.0.1:8080"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
 
 settings = Settings()

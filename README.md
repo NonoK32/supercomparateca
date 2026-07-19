@@ -39,10 +39,11 @@ Comunicación: `api ↔ ocr-service` por HTTP interno; `api ↔ db` por SQL.
 
 ```bash
 cp .env.example .env        # y rellena los valores reales
-docker compose up --build   # levanta db (PostgreSQL), ocr-service y api
+docker compose up --build   # levanta db, ocr-service, api y frontend
 ```
 
-- API en `http://localhost:8000` (Swagger en `/docs`).
+- **Frontend** en `http://localhost:8090` (registro, subir ticket, comparar).
+- **API** en `http://localhost:8000` (Swagger en `/docs`).
 - `db` y `ocr-service` quedan en la red interna (sin puertos al host).
 - La imagen del `ocr-service` incluye Tesseract con español.
 

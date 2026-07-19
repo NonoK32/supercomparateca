@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from .config import settings
 from .database import Base, engine
 from .routers import auth, lineas, productos, supermercados, tickets
 
@@ -15,6 +17,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="SuperComparateca API", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health", tags=["health"])

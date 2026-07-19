@@ -56,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api, ocr-service]
+        service: [api, ocr-service, frontend]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

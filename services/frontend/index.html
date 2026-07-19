@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SuperComparateca</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>🛒 SuperComparateca</h1>
+    <button id="btn-logout" class="hidden">Cerrar sesión</button>
+  </header>
+
+  <main>
+    <!-- Login / registro -->
+    <section id="vista-auth">
+      <div class="card">
+        <h2>Entrar</h2>
+        <form id="form-login">
+          <input type="email" id="login-email" placeholder="email" required>
+          <input type="password" id="login-password" placeholder="contraseña" required>
+          <button type="submit">Iniciar sesión</button>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Crear cuenta</h2>
+        <form id="form-registro">
+          <input type="text" id="reg-nombre" placeholder="nombre" required>
+          <input type="email" id="reg-email" placeholder="email" required>
+          <input type="password" id="reg-password" placeholder="contraseña (mín. 8)" required minlength="8">
+          <button type="submit">Registrarme</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- App -->
+    <section id="vista-app" class="hidden">
+      <div class="card">
+        <h2>Subir ticket</h2>
+        <div class="fila">
+          <select id="sel-supermercado"></select>
+          <input type="text" id="nuevo-super" placeholder="nuevo supermercado">
+          <button id="btn-add-super" type="button">Añadir</button>
+        </div>
+        <form id="form-ticket">
+          <input type="file" id="ticket-imagen" accept="image/*" required>
+          <input type="date" id="ticket-fecha">
+          <button type="submit">Subir y procesar</button>
+        </form>
+      </div>
+
+      <div class="card hidden" id="card-ticket">
+        <h2>Líneas del ticket <span id="ticket-estado" class="badge"></span></h2>
+        <p class="muted">Confirma a qué producto corresponde cada línea.</p>
+        <table id="tabla-lineas">
+          <thead><tr><th>Texto</th><th>Precio</th><th>Producto</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Comparar precios</h2>
+        <div class="fila">
+          <select id="sel-producto"></select>
+          <button id="btn-comparar" type="button">Comparar</button>
+        </div>
+        <div id="resultado-precios"></div>
+      </div>
+    </section>
+  </main>
+
+  <p id="mensaje" class="hidden"></p>
+  <script src="app.js"></script>
+</body>
+</html>

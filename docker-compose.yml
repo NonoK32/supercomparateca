@@ -37,6 +37,7 @@ services:
       OCR_SERVICE_URL: http://ocr-service:8001
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8090,http://127.0.0.1:8090}
     ports:
       - "8000:8000"
     depends_on:
@@ -49,6 +50,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  frontend:
+    build: ./services/frontend
+    ports:
+      - "8090:8080"
+    depends_on:
+      - api
 
 volumes:
   pgdata:
