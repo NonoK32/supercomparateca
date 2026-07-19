@@ -1,0 +1,44 @@
+---
+- name: Actualizar la caché de apt
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Instalar paquetes base
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+      - ufw
+      - fail2ban
+      - python3
+    state: present
+
+- name: Crear el usuario de despliegue
+  ansible.builtin.user:
+    name: "{{ deploy_user }}"
+    groups: sudo
+    shell: /bin/bash
+    create_home: true
+
+- name: Autorizar la clave SSH del usuario de despliegue
+  ansible.posix.authorized_key:
+    user: "{{ deploy_user }}"
+    key: "{{ deploy_ssh_key }}"
+    state: present
+
+- name: Permitir sudo sin contraseña al usuario de despliegue
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ deploy_user }}"
+    content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: Endurecer SSH (sin login de root, sin contraseña)
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-hardening.conf
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+    mode: "0644"
+  notify: Reiniciar ssh

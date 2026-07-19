@@ -1,7 +1,9 @@
 "use strict";
 
-// La API se publica en el puerto 8000 del mismo host donde se abre el frontend.
-const API_BASE = `http://${location.hostname}:8000`;
+// En producción (HTTPS, detrás de Traefik) la API va en el mismo origen bajo
+// /api (sin CORS). En desarrollo se publica en el puerto 8000 del host.
+const API_BASE =
+  location.protocol === "https:" ? "/api" : `http://${location.hostname}:8000`;
 
 let token = localStorage.getItem("token") || null;
 

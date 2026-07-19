@@ -1,0 +1,42 @@
+---
+- name: Crear el directorio de keyrings de apt
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Descargar la clave GPG de Docker
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Añadir el repositorio de Docker
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+    filename: docker
+    state: present
+
+- name: Instalar Docker Engine y el plugin Compose
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Docker arrancado y habilitado al inicio
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Añadir el usuario de despliegue al grupo docker
+  ansible.builtin.user:
+    name: "{{ deploy_user }}"
+    groups: docker
+    append: true

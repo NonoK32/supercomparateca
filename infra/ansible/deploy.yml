@@ -1,0 +1,33 @@
+---
+- name: Desplegar SuperComparateca
+  hosts: web
+  become: true
+  vars:
+    app_dir: /opt/supercomparateca
+  tasks:
+    - name: Clonar/actualizar el repositorio
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: main
+
+    - name: Comprobar que existe el fichero .env
+      ansible.builtin.stat:
+        path: "{{ app_dir }}/.env"
+      register: env_file
+
+    - name: Avisar si falta .env
+      ansible.builtin.fail:
+        msg: >-
+          Falta {{ app_dir }}/.env. Cópialo al servidor con los secretos reales
+          (no está versionado) antes de desplegar.
+      when: not env_file.stat.exists
+
+    - name: Levantar el stack de producción
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        files:
+          - docker-compose.yml
+          - docker-compose.prod.yml
+        state: present
+        build: always

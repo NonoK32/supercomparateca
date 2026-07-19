@@ -1,0 +1,8 @@
+---
+- name: Aprovisionar el servidor (base, Docker, firewall)
+  hosts: web
+  become: true
+  roles:
+    - base
+    - docker
+    - firewall

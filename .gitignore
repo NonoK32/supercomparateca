@@ -38,6 +38,11 @@ uploads/
 *.sqlite3
 *.db
 pgdata/
+backups/
+
+# ---- Ansible (inventario y variables reales; se versiona solo el .example) ----
+infra/ansible/inventory.ini
+infra/ansible/group_vars/all.yml
 
 # ---- OCR / temporales ----
 *.tmp

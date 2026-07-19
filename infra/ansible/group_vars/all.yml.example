@@ -1,0 +1,9 @@
+# Copia a group_vars/all.yml y ajusta los valores.
+---
+deploy_user: deploy
+# Clave pública SSH que podrá entrar como el usuario de despliegue.
+deploy_ssh_key: "ssh-ed25519 AAAA... tu-clave"
+
+# Despliegue de la aplicación.
+app_dir: /opt/supercomparateca
+repo_url: https://github.com/NonoK32/supercomparateca.git

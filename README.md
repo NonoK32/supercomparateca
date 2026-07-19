@@ -52,6 +52,22 @@ El archivo `.env` está en `.gitignore` y **nunca** debe subirse al repositorio.
 Para desarrollar un servicio suelto (sin Docker), mira su `README.md`
 (`services/api`, `services/ocr-service`); en ese modo el `api` usa SQLite.
 
+## Despliegue (producción)
+
+- **Aprovisionamiento** del servidor (Hetzner) con Ansible: ver
+  [`infra/ansible/`](infra/ansible/) (Docker, firewall, usuario no-root, SSH).
+- **Reverse-proxy + HTTPS**: `docker-compose.prod.yml` añade **Traefik** con
+  Let's Encrypt. Sirve el frontend en `https://DOMAIN/` y la API en
+  `https://DOMAIN/api/` (mismo origen, sin CORS).
+
+  ```bash
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+  ```
+
+- **Scripts de operación** ([`scripts/`](scripts/)): `backup-db.sh` (backup de
+  PostgreSQL con retención, para cron), `healthcheck.sh` (monitorización) y
+  `deploy.sh` (despliegue/actualización).
+
 ## Roadmap (fases)
 
 - **MVP (Fase 1):** un usuario; asociación manual línea↔producto; histórico y comparativa; frontend simple.
