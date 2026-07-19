@@ -10,7 +10,13 @@ Se comunica con `ocr-service` por HTTP interno y con `db` (PostgreSQL) por SQL.
 
 ## Estado
 
-Implementado (EPIC 1): modelos `Supermercado` y `Producto` + CRUD completo y `/health`.
+- EPIC 1: modelos `Supermercado` y `Producto` + CRUD completo y `/health`.
+- EPIC 2: ingesta de tickets (`POST /tickets`) — sube imagen, la envía al
+  `ocr-service`, parsea líneas/precios y guarda `Ticket` + `LineaTicket` en
+  estado `pendiente`. La imagen se descarta tras el OCR.
+
+Variable `OCR_SERVICE_URL` para localizar al `ocr-service` (por defecto
+`http://ocr-service:8001`).
 
 ## Stack
 

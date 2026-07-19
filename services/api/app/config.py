@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "sqlite:///./supercomparateca.db"
+    ocr_service_url: str = "http://ocr-service:8001"
 
 
 settings = Settings()

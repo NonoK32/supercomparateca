@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from .database import Base, engine
-from .routers import productos, supermercados
+from .routers import productos, supermercados, tickets
 
 
 @asynccontextmanager
@@ -24,3 +24,4 @@ def health():
 
 app.include_router(supermercados.router)
 app.include_router(productos.router)
+app.include_router(tickets.router)
