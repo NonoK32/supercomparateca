@@ -69,6 +69,33 @@ class TicketRead(BaseModel):
     lineas: list[LineaTicketRead]
 
 
+# ---- Consultas de precios ----
+class PrecioSupermercado(BaseModel):
+    supermercado_id: int
+    supermercado: str
+    precio_actual: Decimal
+    fecha: date
+    num_observaciones: int
+
+
+class ComparativaPrecios(BaseModel):
+    producto_id: int
+    nombre_normalizado: str
+    supermercados: list[PrecioSupermercado]
+
+
+class PuntoHistorico(BaseModel):
+    fecha: date
+    precio: Decimal
+    supermercado_id: int
+    supermercado: str
+
+
+class HistoricoPrecios(BaseModel):
+    producto_id: int
+    historico: list[PuntoHistorico]
+
+
 class AsociarRequest(BaseModel):
     """Asocia una línea a un producto existente (`producto_id`) o crea/reutiliza
     uno nuevo (`nuevo_producto`). Debe indicarse exactamente uno de los dos."""

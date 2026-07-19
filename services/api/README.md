@@ -18,6 +18,9 @@ Se comunica con `ocr-service` por HTTP interno y con `db` (PostgreSQL) por SQL.
   aprendizaje de alias (`AliasProducto`). En la ingesta, si ya hay alias exacto
   para ese supermercado, el producto se asigna automáticamente. El ticket pasa a
   `procesado` cuando todas sus líneas están asociadas.
+- EPIC 4: consulta de precios — `GET /productos/{id}/precios` (comparativa entre
+  supermercados, precio más reciente) y `GET /productos/{id}/historico`
+  (evolución temporal, filtrable por `?supermercado_id=`).
 
 Variable `OCR_SERVICE_URL` para localizar al `ocr-service` (por defecto
 `http://ocr-service:8001`).

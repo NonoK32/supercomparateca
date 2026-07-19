@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+from .. import consultas, models, schemas
 from ..database import get_db
 
 router = APIRouter(prefix="/productos", tags=["productos"])
@@ -64,3 +64,32 @@ def eliminar(producto_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Producto no encontrado")
     db.delete(producto)
     db.commit()
+
+
+@router.get("/{producto_id}/precios", response_model=schemas.ComparativaPrecios)
+def precios(producto_id: int, db: Session = Depends(get_db)):
+    """FR7: precio más reciente del producto en cada supermercado."""
+    producto = db.get(models.Producto, producto_id)
+    if producto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Producto no encontrado")
+    return schemas.ComparativaPrecios(
+        producto_id=producto.id,
+        nombre_normalizado=producto.nombre_normalizado,
+        supermercados=consultas.precios_por_supermercado(db, producto_id),
+    )
+
+
+@router.get("/{producto_id}/historico", response_model=schemas.HistoricoPrecios)
+def historico(
+    producto_id: int,
+    supermercado_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """FR8: evolución del precio del producto en el tiempo."""
+    producto = db.get(models.Producto, producto_id)
+    if producto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Producto no encontrado")
+    return schemas.HistoricoPrecios(
+        producto_id=producto.id,
+        historico=consultas.historico(db, producto_id, supermercado_id),
+    )
