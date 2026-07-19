@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ---- Supermercado ----
@@ -67,3 +67,19 @@ class TicketRead(BaseModel):
     estado: str
     texto_ocr_bruto: str
     lineas: list[LineaTicketRead]
+
+
+class AsociarRequest(BaseModel):
+    """Asocia una línea a un producto existente (`producto_id`) o crea/reutiliza
+    uno nuevo (`nuevo_producto`). Debe indicarse exactamente uno de los dos."""
+
+    producto_id: int | None = None
+    nuevo_producto: ProductoCreate | None = None
+
+    @model_validator(mode="after")
+    def exactamente_uno(self):
+        if (self.producto_id is None) == (self.nuevo_producto is None):
+            raise ValueError(
+                "Indica 'producto_id' o 'nuevo_producto' (exactamente uno)"
+            )
+        return self

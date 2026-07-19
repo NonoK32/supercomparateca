@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import models, parsing, schemas
+from .. import asociacion, models, parsing, schemas
 from ..database import get_db
 from ..ocr import OCRClient, get_ocr_client
 
@@ -41,13 +41,18 @@ def subir(
         estado="pendiente",
     )
     for linea in parsing.parsear_lineas(texto):
-        ticket.lineas.append(
-            models.LineaTicket(
-                texto_original=linea.texto_original,
-                precio_total=linea.precio_total,
-            )
+        nueva = models.LineaTicket(
+            texto_original=linea.texto_original,
+            precio_total=linea.precio_total,
         )
+        # §5bis punto 1: si ya hay alias exacto para este supermercado, se
+        # asigna el producto automáticamente (sin preguntar).
+        alias = asociacion.buscar_alias(db, supermercado_id, linea.texto_original)
+        if alias is not None:
+            nueva.producto_id = alias.producto_id
+        ticket.lineas.append(nueva)
 
+    asociacion.recalcular_estado(ticket)
     db.add(ticket)
     db.commit()
     db.refresh(ticket)

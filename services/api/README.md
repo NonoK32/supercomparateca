@@ -14,6 +14,10 @@ Se comunica con `ocr-service` por HTTP interno y con `db` (PostgreSQL) por SQL.
 - EPIC 2: ingesta de tickets (`POST /tickets`) — sube imagen, la envía al
   `ocr-service`, parsea líneas/precios y guarda `Ticket` + `LineaTicket` en
   estado `pendiente`. La imagen se descarta tras el OCR.
+- EPIC 3: asociación manual línea↔producto (`POST /lineas/{id}/asociar`) con
+  aprendizaje de alias (`AliasProducto`). En la ingesta, si ya hay alias exacto
+  para ese supermercado, el producto se asigna automáticamente. El ticket pasa a
+  `procesado` cuando todas sus líneas están asociadas.
 
 Variable `OCR_SERVICE_URL` para localizar al `ocr-service` (por defecto
 `http://ocr-service:8001`).

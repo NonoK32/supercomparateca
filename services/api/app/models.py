@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -47,9 +47,26 @@ class LineaTicket(Base):
     cantidad: Mapped[int] = mapped_column(default=1)
     precio_unitario: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
     precio_total: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    # Se asocia en EPIC 3 (asociación manual línea↔producto).
     producto_id: Mapped[int | None] = mapped_column(
         ForeignKey("productos.id"), default=None
     )
 
     ticket: Mapped["Ticket"] = relationship(back_populates="lineas")
+
+
+class AliasProducto(Base):
+    """Aprendizaje: qué producto corresponde a un texto de ticket, por supermercado.
+
+    Un mismo texto en un supermercado apunta a un único producto (unicidad), pero
+    el mismo producto puede tener varios alias y en distintos supermercados.
+    """
+
+    __tablename__ = "alias_producto"
+    __table_args__ = (
+        UniqueConstraint("supermercado_id", "texto_alias", name="uq_alias_sm_texto"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    producto_id: Mapped[int] = mapped_column(ForeignKey("productos.id"))
+    supermercado_id: Mapped[int] = mapped_column(ForeignKey("supermercados.id"))
+    texto_alias: Mapped[str] = mapped_column(String(300), index=True)
