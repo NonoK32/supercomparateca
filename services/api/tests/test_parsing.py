@@ -29,6 +29,14 @@ def test_ignora_lineas_de_resumen():
     assert lineas[0].texto_original == "LECHE"
 
 
+def test_no_confunde_iva_con_oliva():
+    # "OLIVA" contiene "IVA": no debe descartarse como línea de resumen.
+    lineas = parsear_lineas("ACEITE DE OLIVA 4,95")
+    assert len(lineas) == 1
+    assert lineas[0].texto_original == "ACEITE DE OLIVA"
+    assert lineas[0].precio_total == Decimal("4.95")
+
+
 def test_ignora_lineas_sin_precio():
     texto = "MERCADONA S.A.\nGRACIAS POR SU COMPRA\nLECHE 0,89"
     lineas = parsear_lineas(texto)

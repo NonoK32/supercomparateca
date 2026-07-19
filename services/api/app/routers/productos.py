@@ -68,7 +68,14 @@ def eliminar(producto_id: int, db: Session = Depends(get_db)):
     if producto is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Producto no encontrado")
     db.delete(producto)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No se puede eliminar: el producto está en uso",
+        )
 
 
 @router.get("/{producto_id}/precios", response_model=schemas.ComparativaPrecios)

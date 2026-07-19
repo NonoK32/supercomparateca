@@ -1,12 +1,17 @@
 """Configuración de Behave: un cliente de API con BD SQLite en memoria y OCR
 falso por escenario (mismo enfoque que los tests unitarios)."""
 
+import os
+
+# Debe fijarse antes de importar la app (config valida el secreto en el import).
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-para-behave-1234567890abcdef")
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database import Base, get_db
+from app.database import Base, activar_fk_sqlite, get_db
 from app.main import app
 from app.ocr import get_ocr_client
 
@@ -24,6 +29,7 @@ def before_scenario(context, scenario):
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    activar_fk_sqlite(engine)
     Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(bind=engine)
 

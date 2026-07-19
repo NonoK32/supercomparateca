@@ -1,10 +1,16 @@
+import os
+
+# Secreto JWT para los tests: debe fijarse antes de importar la app (config lo
+# exige y lo valida en el import).
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-para-tests-1234567890abcdef")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database import Base, get_db
+from app.database import Base, activar_fk_sqlite, get_db
 from app.main import app
 from app.ocr import get_ocr_client
 
@@ -32,6 +38,7 @@ def api_client(fake_ocr):
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    activar_fk_sqlite(engine)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(bind=engine)
 

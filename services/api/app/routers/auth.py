@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, seguridad
@@ -25,7 +26,12 @@ def registro(payload: schemas.UsuarioCreate, db: Session = Depends(get_db)):
         password_hash=seguridad.hash_password(payload.password),
     )
     db.add(usuario)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Red de seguridad ante registros concurrentes con el mismo email.
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe un usuario con ese email")
     db.refresh(usuario)
     return usuario
 

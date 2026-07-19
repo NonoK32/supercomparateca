@@ -12,16 +12,20 @@ from decimal import Decimal
 # Precio: 1 a 4 dígitos, coma o punto decimal, exactamente 2 decimales.
 _PRECIO = re.compile(r"(?<!\d)(\d{1,4})[.,](\d{2})(?!\d)")
 
-# Líneas de resumen del ticket que no son productos.
-_IGNORAR = (
-    "TOTAL",
-    "SUBTOTAL",
-    "IVA",
-    "EFECTIVO",
-    "TARJETA",
-    "CAMBIO",
-    "ENTREGA",
-    "DEVOLVER",
+# Palabras de líneas de resumen del ticket que no son productos. Se comparan por
+# palabra completa (no subcadena) para no descartar productos como "ACEITE DE
+# OLIVA" (que contiene "IVA").
+_IGNORAR = frozenset(
+    {
+        "TOTAL",
+        "SUBTOTAL",
+        "IVA",
+        "EFECTIVO",
+        "TARJETA",
+        "CAMBIO",
+        "ENTREGA",
+        "DEVOLVER",
+    }
 )
 
 
@@ -48,8 +52,8 @@ def parsear_lineas(texto: str) -> list[LineaParseada]:
         # Debe quedar texto con letras (descarta líneas solo numéricas).
         if not any(c.isalpha() for c in descripcion):
             continue
-        # Descarta líneas de resumen (TOTAL, IVA, etc.).
-        if any(palabra in descripcion.upper() for palabra in _IGNORAR):
+        # Descarta líneas de resumen (TOTAL, IVA, etc.), por palabra completa.
+        if _IGNORAR & set(descripcion.upper().split()):
             continue
 
         precio = Decimal(f"{ultimo.group(1)}.{ultimo.group(2)}")

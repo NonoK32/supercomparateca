@@ -25,6 +25,11 @@ async function api(path, { method = "GET", json, form } = {}) {
     body = form;
   }
   const resp = await fetch(API_BASE + path, { method, headers, body });
+  if (resp.status === 401) {
+    // Token ausente/expirado: cerramos sesión y volvemos al login.
+    cerrarSesion();
+    throw new Error("Sesión expirada, vuelve a iniciar sesión");
+  }
   if (resp.status === 204) return null;
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
@@ -34,18 +39,29 @@ async function api(path, { method = "GET", json, form } = {}) {
 }
 
 // ---- Autenticación ----
-function mostrarApp() {
+async function mostrarApp() {
   $("vista-auth").classList.add("hidden");
   $("vista-app").classList.remove("hidden");
   $("btn-logout").classList.remove("hidden");
-  cargarSupermercados();
-  cargarProductos();
+  try {
+    await cargarSupermercados();
+    await cargarProductos();
+  } catch (err) {
+    // Un 401 aquí ya habrá llamado a cerrarSesion() desde api().
+    mensaje(err.message, true);
+  }
 }
 
 function mostrarAuth() {
   $("vista-app").classList.add("hidden");
   $("vista-auth").classList.remove("hidden");
   $("btn-logout").classList.add("hidden");
+}
+
+function cerrarSesion() {
+  token = null;
+  localStorage.removeItem("token");
+  mostrarAuth();
 }
 
 async function login(email, password) {
@@ -87,11 +103,7 @@ $("form-registro").addEventListener("submit", async (e) => {
   }
 });
 
-$("btn-logout").addEventListener("click", () => {
-  token = null;
-  localStorage.removeItem("token");
-  mostrarAuth();
-});
+$("btn-logout").addEventListener("click", cerrarSesion);
 
 // ---- Supermercados ----
 async function cargarSupermercados() {
@@ -213,19 +225,49 @@ $("btn-comparar").addEventListener("click", async () => {
   }
 });
 
+function celda(texto, clase) {
+  const td = document.createElement("td");
+  td.textContent = texto;
+  if (clase) td.className = clase;
+  return td;
+}
+
 function mostrarComparativa(data) {
   const cont = $("resultado-precios");
+  cont.textContent = "";
   if (!data.supermercados.length) {
-    cont.innerHTML = `<p class="muted">Aún no hay precios para «${data.nombre_normalizado}».</p>`;
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = `Aún no hay precios para «${data.nombre_normalizado}».`;
+    cont.appendChild(p);
     return;
   }
-  let html = `<table><thead><tr><th>Supermercado</th><th>Precio actual</th><th>Fecha</th><th>Obs.</th></tr></thead><tbody>`;
+
+  const tabla = document.createElement("table");
+  const thead = document.createElement("thead");
+  const trHead = document.createElement("tr");
+  for (const titulo of ["Supermercado", "Precio actual", "Fecha", "Obs."]) {
+    const th = document.createElement("th");
+    th.textContent = titulo;
+    trHead.appendChild(th);
+  }
+  thead.appendChild(trHead);
+  tabla.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
   data.supermercados.forEach((s, i) => {
-    const clase = i === 0 ? "barato" : "";
-    html += `<tr class="${clase}"><td>${s.supermercado}</td><td>${s.precio_actual} €</td><td>${s.fecha}</td><td>${s.num_observaciones}</td></tr>`;
+    const tr = document.createElement("tr");
+    // El primero es el más barato (la API ordena por precio ascendente).
+    tr.append(
+      celda(s.supermercado, i === 0 ? "barato" : ""),
+      celda(`${s.precio_actual} €`),
+      celda(s.fecha),
+      celda(String(s.num_observaciones)),
+    );
+    tbody.appendChild(tr);
   });
-  html += "</tbody></table>";
-  cont.innerHTML = html;
+  tabla.appendChild(tbody);
+  cont.appendChild(tabla);
 }
 
 // ---- Arranque ----

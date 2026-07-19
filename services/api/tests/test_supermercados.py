@@ -45,3 +45,15 @@ def test_eliminar(client):
 
 def test_obtener_inexistente_da_404(client):
     assert client.get("/supermercados/999").status_code == 404
+
+
+def test_no_se_puede_eliminar_supermercado_en_uso(client, fake_ocr):
+    # Supermercado referenciado por un ticket -> borrarlo debe dar 409, no 500.
+    sm = client.post("/supermercados", json={"nombre": "Mercadona"}).json()
+    fake_ocr.texto = "LECHE 0,89\n"
+    client.post(
+        "/tickets",
+        data={"supermercado_id": sm["id"]},
+        files={"imagen": ("t.jpg", b"x", "image/jpeg")},
+    )
+    assert client.delete(f"/supermercados/{sm['id']}").status_code == 409

@@ -1,4 +1,13 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Valores que NUNCA deben usarse como secreto en un despliegue real. Si se
+# detecta uno de ellos (o algo demasiado corto), la app se niega a arrancar.
+_SECRETOS_INSEGUROS = {
+    "",
+    "dev-insecure-secret-change-me-in-production",
+    "cambia-esto-por-un-secreto-largo-y-aleatorio",
+}
 
 
 class Settings(BaseSettings):
@@ -13,14 +22,24 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./supercomparateca.db"
     ocr_service_url: str = "http://ocr-service:8001"
 
-    # Secreto JWT: en producción se inyecta por entorno (nunca el valor por
-    # defecto). Genera uno con: openssl rand -hex 32
-    jwt_secret_key: str = "dev-insecure-secret-change-me-in-production"
+    # Obligatorio: no hay valor por defecto usable. Genera uno con:
+    #   openssl rand -hex 32
+    jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
     # Orígenes permitidos para el frontend (CORS), separados por comas.
     cors_origins: str = "http://localhost:8080,http://127.0.0.1:8080"
+
+    @field_validator("jwt_secret_key")
+    @classmethod
+    def _secreto_seguro(cls, valor: str) -> str:
+        if valor in _SECRETOS_INSEGUROS or len(valor) < 16:
+            raise ValueError(
+                "JWT_SECRET_KEY sin configurar o inseguro. "
+                "Genera uno con: openssl rand -hex 32"
+            )
+        return valor
 
     @property
     def cors_origins_list(self) -> list[str]:

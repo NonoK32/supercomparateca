@@ -36,5 +36,10 @@ include = ["app*"]
 line-length = 100
 target-version = "py310"
 
+[tool.ruff.lint.per-file-ignores]
+# El secreto JWT debe fijarse en el entorno antes de importar la app.
+"tests/conftest.py" = ["E402"]
+"features/environment.py" = ["E402"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

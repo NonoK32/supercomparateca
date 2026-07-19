@@ -41,3 +41,19 @@ def test_eliminar(client):
     creado = client.post("/productos", json={"nombre_normalizado": "Yogur natural x4"}).json()
     assert client.delete(f"/productos/{creado['id']}").status_code == 204
     assert client.get(f"/productos/{creado['id']}").status_code == 404
+
+
+def test_no_se_puede_eliminar_producto_en_uso(client, fake_ocr):
+    # Producto asociado a una línea de ticket -> borrarlo debe dar 409, no 500.
+    sm = client.post("/supermercados", json={"nombre": "Mercadona"}).json()
+    fake_ocr.texto = "LECHE 0,89\n"
+    ticket = client.post(
+        "/tickets",
+        data={"supermercado_id": sm["id"]},
+        files={"imagen": ("t.jpg", b"x", "image/jpeg")},
+    ).json()
+    asoc = client.post(
+        f"/lineas/{ticket['lineas'][0]['id']}/asociar",
+        json={"nuevo_producto": {"nombre_normalizado": "Leche desnatada 1L"}},
+    ).json()
+    assert client.delete(f"/productos/{asoc['producto_id']}").status_code == 409

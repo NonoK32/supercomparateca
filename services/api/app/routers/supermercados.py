@@ -68,4 +68,11 @@ def eliminar(sm_id: int, db: Session = Depends(get_db)):
     if sm is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Supermercado no encontrado")
     db.delete(sm)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No se puede eliminar: el supermercado está en uso",
+        )
