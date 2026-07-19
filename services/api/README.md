@@ -47,7 +47,8 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"     # instala la app y las dependencias de desarrollo
 
 .venv/bin/ruff check .                 # lint
-.venv/bin/pytest -q                    # tests
+.venv/bin/pytest -q                    # tests unitarios / de API
+.venv/bin/behave                       # tests de aceptación (BDD, en features/)
 .venv/bin/uvicorn app.main:app --reload   # servidor en http://127.0.0.1:8000
 ```
 
