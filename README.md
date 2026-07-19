@@ -1,5 +1,7 @@
 # SuperComparateca
 
+[![CI](https://github.com/NonoK32/supercomparateca/actions/workflows/ci.yml/badge.svg)](https://github.com/NonoK32/supercomparateca/actions/workflows/ci.yml)
+
 App para **comparar precios de la compra** entre supermercados españoles (Mercadona, Lidl, Dia, Aldi) a partir de tickets escaneados.
 
 Subes la foto de un ticket, el sistema extrae el texto por OCR, confirmas a qué producto corresponde cada línea y queda guardado con precio, fecha y supermercado. Después puedes consultar el histórico y comparar precios entre supermercados y en el tiempo.
