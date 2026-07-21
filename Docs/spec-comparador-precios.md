@@ -118,6 +118,40 @@ Comunicación: api ↔ ocr-service vía llamada HTTP interna; api ↔ db vía SQ
 - **EPIC 10** *(Fase 2)* — Matching automático por similitud de texto
 - **EPIC 11** *(Fase 3)* — Multiusuario y datos compartidos
 - **EPIC 12** *(Fase 4)* — Migración a k3s
+- **EPIC 13** — Puesta en producción real (servidor, dominio, certificados, CD)
+
+### EPIC 13 — Puesta en producción real
+
+Hueco detectado al cerrar la Fase 3: EPIC 7 automatiza la **configuración de un
+servidor que ya existe**, y EPIC 8 se queda en `build`. Entre "el código de
+despliegue está escrito" y "la aplicación está en internet" faltan pasos que no
+pertenecen a ninguna EPIC.
+
+| Tarea | Descripción | Tipo |
+|---|---|---|
+| **13.1** | Alta del servidor en Hetzner (cuenta, tipo de máquina, clave SSH, IP → `inventory.ini`). Runbook manual o módulo `hetzner.hcloud`. | manual + doc |
+| **13.2** | Compra del dominio y registro DNS A/AAAA → IP del servidor, **verificado antes** de arrancar Traefik. | manual + doc |
+| **13.3** | Perfil de *staging* de Let's Encrypt para ensayar la emisión sin consumir los rate limits de producción. | código |
+| **13.4** | Cerrar NFR3: push de imágenes a un registry (GHCR) + job de despliegue; producción consume imágenes en vez de compilarlas. | código |
+| **13.5** | Cron de `backup-db.sh` y `healthcheck.sh` instalados por Ansible; incluir `acme.json` en el backup. | código |
+| **13.6** | Gestión de secretos en el servidor (Ansible Vault o procedimiento documentado) en lugar de copiar `.env` a mano. | código + doc |
+
+**Riesgos que motivan estas tareas:**
+
+- El reto **HTTP-01 de Let's Encrypt falla si el DNS no resuelve ya** a la IP del
+  servidor: 13.2 es prerrequisito duro de cualquier despliegue con HTTPS. Sin
+  13.3, cada intento fallido consume cuota (5 fallos/hora, 50 certificados por
+  dominio y semana) y puede dejar el dominio bloqueado durante horas.
+- Sin 13.4, `deploy.yml` construye las imágenes **en el servidor**; en una
+  máquina pequeña (2 GB de RAM) la compilación puede morir por OOM.
+- `backup-db.sh` documenta su línea de cron en un comentario pero **ningún rol
+  la instala**: hoy el backup existe y no se ejecuta nunca (13.5).
+
+**Dependencia con EPIC 12:** si se migra a k3s, **13.3, 13.4 y 13.5 se rehacen**
+(el HTTPS pasa a cert-manager y el despliegue a `kubectl`/Helm). **13.1, 13.2 y
+13.6 sobreviven** a la migración: el servidor, el dominio y los secretos son los
+mismos. Por eso conviene hacer esas tres primero si el orden aún no está
+decidido.
 
 ---
 
