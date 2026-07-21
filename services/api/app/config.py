@@ -41,7 +41,10 @@ class Settings(BaseSettings):
     @field_validator("jwt_secret_key")
     @classmethod
     def _secreto_seguro(cls, valor: str) -> str:
-        if valor in _SECRETOS_INSEGUROS or len(valor) < 16:
+        # 32 caracteres minimo: HS256 firma con el secreto en claro, asi que uno
+        # corto es vulnerable a fuerza bruta offline sobre un token capturado.
+        # `openssl rand -hex 32` da 64, que es lo que documentamos.
+        if valor in _SECRETOS_INSEGUROS or len(valor) < 32:
             raise ValueError(
                 "JWT_SECRET_KEY sin configurar o inseguro. "
                 "Genera uno con: openssl rand -hex 32"

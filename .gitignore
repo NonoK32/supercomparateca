@@ -11,6 +11,13 @@ secrets/
 *_rsa
 *_rsa.pub
 id_*
+# ssh-keygen no pone extension a la clave privada, asi que los patrones de
+# arriba no cubren nombres arbitrarios (deploy_key, hetzner, el nombre del
+# proyecto...). Lo mas seguro es no meter nunca una clave en el repo.
+*_key
+*_ed25519
+*_ecdsa
+deploy_key
 credentials.json
 service-account*.json
 
@@ -57,3 +64,5 @@ CLAUDE.md
 .idea/
 .vscode/
 *.swp
+
+notas.txt
