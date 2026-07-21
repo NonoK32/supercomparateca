@@ -74,6 +74,7 @@ pbcopy < ~/.ssh/supercomparateca.pub
    | Networking | IPv4 pública **activada** | Sin IPv4 pública, Let's Encrypt no te alcanza. |
    | SSH keys | marca la del paso 3 | Si se te olvida, Hetzner te manda la contraseña de root por email: peor. |
    | Firewalls / Backups | déjalos vacíos | El firewall lo pone Ansible (`ufw`); los backups los harás tú (tarea 13.5). |
+   | Volumes | **ninguno** | Los 40 GB del servidor sobran: las imágenes de los tickets se descartan tras el OCR. Ojo al choque de nombres: los `volumes` del `docker-compose.yml` (`pgdata`, `letsencrypt`) son volúmenes de Docker y viven en el disco del propio servidor; no hay que comprar nada. |
    | Name | `supercomparateca` | |
 
 5. **Create & Buy now**. En unos 30 segundos tienes la IP pública. Cópiala.
