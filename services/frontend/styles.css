@@ -1,43 +1,71 @@
+/* Mobile-first: los estilos base son los del movil y el escritorio es la
+   excepcion, no al reves. Referencia de trabajo: iPhone 13 (390 px). */
+
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: #f4f5f7;
   color: #1c2733;
+  /* Evita que iOS reescale el texto al girar el movil. */
+  -webkit-text-size-adjust: 100%;
 }
+
 header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.5rem;
+  gap: .75rem;
+  padding: .9rem 1rem;
   background: #2d7d46;
   color: #fff;
 }
-header h1 { margin: 0; font-size: 1.3rem; }
+header h1 { margin: 0; font-size: 1.15rem; }
+
 main {
   max-width: 760px;
-  margin: 1.5rem auto;
+  margin: 1rem auto;
   padding: 0 1rem;
   display: grid;
-  gap: 1.25rem;
+  gap: 1rem;
 }
-#vista-auth { display: grid; gap: 1.25rem; grid-template-columns: 1fr 1fr; }
+
+/* Una columna en movil; dos solo cuando hay sitio de sobra. */
+#vista-auth { display: grid; gap: 1rem; }
+
 .card {
   background: #fff;
   border-radius: 10px;
-  padding: 1.25rem;
+  padding: 1rem;
   box-shadow: 0 1px 3px rgba(0,0,0,.08);
 }
-.card h2 { margin-top: 0; font-size: 1.1rem; }
+.card h2 { margin-top: 0; font-size: 1.05rem; }
+
 form { display: grid; gap: .6rem; }
+/* Sin esto, los hijos de un grid tienen min-width:auto y no encogen por debajo
+   de su contenido. El <input type="file"> trae un ancho minimo intrinseco (el
+   boton mas "ningun archivo seleccionado") que ensanchaba toda la pagina. */
+form > * { min-width: 0; }
+
+/* Los hijos crecen, pero no por debajo de un ancho usable: en 390 px tres
+   controles a 1/3 quedaban inservibles, asi que envuelven. */
 .fila { display: flex; gap: .5rem; margin-bottom: .75rem; flex-wrap: wrap; }
-.fila > * { flex: 1; }
-input, select, button {
-  padding: .55rem .7rem;
+.fila > * { flex: 1 1 10rem; min-width: 0; }
+
+input, select, button, textarea {
+  /* 16px es el minimo: por debajo, Safari en iOS hace zoom al enfocar el
+     campo y descoloca toda la pagina. No bajar de aqui. */
+  font-size: 16px;
+  font-family: inherit;
+  padding: .6rem .7rem;
   border: 1px solid #ccd3da;
   border-radius: 6px;
-  font-size: .95rem;
+  /* Objetivo tactil comodo (Apple recomienda 44 px). */
+  min-height: 44px;
 }
+input[type="file"] { padding: .5rem; }
+
 button {
   background: #2d7d46;
   color: #fff;
@@ -45,9 +73,55 @@ button {
   cursor: pointer;
 }
 button:hover { background: #276b3c; }
+button:focus-visible { outline: 3px solid #1c2733; outline-offset: 2px; }
 button.sec { background: #e7ebef; color: #1c2733; }
+
+/* ---- Tablas ----
+   Cualquier contenedor de resultados desborda dentro de si mismo, para que
+   nunca aparezca scroll horizontal en el body. */
+#resultado-precios,
+#resultado-cesta,
+.tabla-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #eceef1; font-size: .92rem; }
+th, td {
+  text-align: left;
+  padding: .5rem;
+  border-bottom: 1px solid #eceef1;
+  font-size: .92rem;
+}
+td { font-variant-numeric: tabular-nums; }
+
+/* ---- Lineas del ticket ----
+   Es la pantalla donde mas se trabaja, y una tabla de 3 columnas con un
+   campo de texto dentro no cabe en un movil. En pantallas estrechas cada
+   fila se apila como una ficha, con la etiqueta de cada dato delante. */
+#tabla-lineas thead { display: none; }
+#tabla-lineas tr {
+  display: block;
+  padding: .75rem 0;
+  border-bottom: 1px solid #eceef1;
+}
+#tabla-lineas tr:last-child { border-bottom: none; }
+#tabla-lineas td {
+  display: block;
+  border: none;
+  padding: .15rem 0;
+}
+#tabla-lineas td[data-label]::before {
+  content: attr(data-label);
+  display: block;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #6b7683;
+}
+#tabla-lineas td[data-label="Texto"] { font-weight: 600; }
+#tabla-lineas td[data-label="Producto"] { margin-top: .4rem; }
+
 .badge {
   font-size: .75rem;
   background: #ffe6a7;
@@ -55,22 +129,67 @@ th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #eceef1; fon
   padding: .15rem .5rem;
   border-radius: 999px;
   vertical-align: middle;
+  white-space: nowrap;
 }
 .badge.ok { background: #c9f0d4; color: #1c5c31; }
+
 .muted { color: #6b7683; font-size: .88rem; }
+
 .sugerencias {
-  display: flex; align-items: center; gap: .4rem;
-  flex-wrap: wrap; margin-top: .4rem;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  flex-wrap: wrap;
+  margin-top: .5rem;
 }
-.sugerencias button { font-size: .85rem; padding: .25rem .6rem; }
-.hidden { display: none; }
+.sugerencias button {
+  flex: 0 1 auto;
+  font-size: .9rem;
+  padding: .35rem .7rem;
+  min-height: 38px;
+}
+
+/* Utilidad: tiene que ganar siempre. Sin !important, `#vista-auth {display:grid}`
+   le gana por especificidad de ID y el formulario de login NO se oculta al
+   entrar, quedandose visible por encima de la aplicacion. */
+.hidden { display: none !important; }
+
 #mensaje {
   position: fixed;
-  bottom: 1rem; left: 50%;
+  /* Separado del borde inferior para no quedar bajo la barra de Safari. */
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: 50%;
   transform: translateX(-50%);
-  background: #1c2733; color: #fff;
-  padding: .6rem 1rem; border-radius: 8px;
-  max-width: 90%;
+  background: #1c2733;
+  color: #fff;
+  padding: .6rem 1rem;
+  border-radius: 8px;
+  max-width: calc(100% - 2rem);
+  text-align: center;
+  z-index: 10;
 }
 #mensaje.error { background: #b03030; }
+
 .barato { color: #1c5c31; font-weight: 600; }
+
+/* ---- A partir de tablet: se recupera el diseno de dos columnas y la
+   tabla de lineas vuelve a ser una tabla de verdad. ---- */
+@media (min-width: 40rem) {
+  header { padding: 1rem 1.5rem; }
+  header h1 { font-size: 1.3rem; }
+  main { margin: 1.5rem auto; gap: 1.25rem; }
+  .card { padding: 1.25rem; }
+
+  #vista-auth { grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+
+  #tabla-lineas thead { display: table-header-group; }
+  #tabla-lineas tr { display: table-row; padding: 0; }
+  #tabla-lineas td {
+    display: table-cell;
+    border-bottom: 1px solid #eceef1;
+    padding: .5rem;
+  }
+  #tabla-lineas td[data-label]::before { display: none; }
+  #tabla-lineas td[data-label="Texto"] { font-weight: 400; }
+  #tabla-lineas td[data-label="Producto"] { margin-top: 0; }
+}

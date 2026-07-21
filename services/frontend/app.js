@@ -165,11 +165,16 @@ function mostrarTicket(ticket) {
 
 function filaLinea(linea) {
   const tr = document.createElement("tr");
+  // data-label alimenta el apilado en movil: en pantallas estrechas la fila
+  // se muestra como ficha y cada celda lleva su etiqueta delante (styles.css).
   const tdTexto = document.createElement("td");
+  tdTexto.dataset.label = "Texto";
   tdTexto.textContent = linea.texto_original;
   const tdPrecio = document.createElement("td");
+  tdPrecio.dataset.label = "Precio";
   tdPrecio.textContent = `${linea.precio_total} €`;
   const tdProducto = document.createElement("td");
+  tdProducto.dataset.label = "Producto";
 
   if (linea.producto_id) {
     tdProducto.textContent = "✓ asociada";
