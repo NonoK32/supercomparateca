@@ -270,6 +270,7 @@ espera y repite; no toques nada más.
 
 | Síntoma | Causa habitual |
 |---|---|
+| El tipo de servidor aparece como no disponible | Capacidad agotada en esa ubicación. Prueba otra (Núremberg, Helsinki) o la serie **CPX** (AMD, también x86). **Nunca la serie CAX**: es ARM y el rol de Docker fija `arch=amd64`. |
 | `Permission denied (publickey)` al entrar como root | La clave no se marcó al crear el servidor. |
 | `Permission denied` como `deploy` tras aprovisionar | `deploy_ssh_key` en `all.yml` no es la pública que estás usando. |
 | `Permission denied (publickey)` en Ansible, pero `ssh -i ...` sí entra | Falta `ansible_ssh_private_key_file` en el inventario. |
