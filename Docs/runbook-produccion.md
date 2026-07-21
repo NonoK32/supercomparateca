@@ -69,6 +69,7 @@ pbcopy < ~/.ssh/supercomparateca.pub
    |---|---|---|
    | Location | Nuremberg o Helsinki | Da igual para latencia desde España; Alemania mantiene los datos en la UE (RGPD). |
    | Image | **Ubuntu 24.04** | Es lo que asume el rol `base` (apt, `sshd_config.d`). |
+   | Arquitectura | **x86** (serie CX), no ARM | Ver la nota de abajo. |
    | Type | **CX22** (2 vCPU, 4 GB) | El más pequeño que aguanta compilar imágenes Docker. En el de 2 GB la build puede morir por OOM. |
    | Networking | IPv4 pública **activada** | Sin IPv4 pública, Let's Encrypt no te alcanza. |
    | SSH keys | marca la del paso 3 | Si se te olvida, Hetzner te manda la contraseña de root por email: peor. |
@@ -76,6 +77,14 @@ pbcopy < ~/.ssh/supercomparateca.pub
    | Name | `supercomparateca` | |
 
 5. **Create & Buy now**. En unos 30 segundos tienes la IP pública. Cópiala.
+
+> **¿x86 (CX) o ARM (CAX)?** Las dos funcionan: todas las imágenes base del
+> proyecto son multi-arquitectura y las dependencias con código nativo
+> (`psycopg`, `bcrypt`, `pydantic`, `pillow`) publican wheels para `aarch64`.
+> ARM sale algo más barato. Aun así, aquí se elige **x86** por la tarea 13.4:
+> las imágenes se construirán en GitHub Actions, cuyos runners estándar son
+> x86_64. Con un servidor ARM habría que emular con QEMU (lento, y más aún con
+> Tesseract) o cambiar de runners. Con x86 no hay nada que reconciliar.
 
 Comprueba que entras (sustituye la IP):
 
