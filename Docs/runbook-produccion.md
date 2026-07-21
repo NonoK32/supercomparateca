@@ -55,6 +55,21 @@ Copia la pública al portapapeles:
 pbcopy < ~/.ssh/supercomparateca.pub
 ```
 
+**Carga la clave en el agente SSH.** Este paso es obligatorio si le has puesto
+passphrase: Ansible abre las conexiones de forma no interactiva y **no puede
+pedirte la passphrase**, así que sin esto fallará con un
+`Permission denied (publickey,password)` que parece un problema de permisos
+cuando en realidad es que la clave está cifrada.
+
+```bash
+ssh-add --apple-use-keychain ~/.ssh/supercomparateca   # macOS
+ssh-add -l                                             # debe listarla
+```
+
+En macOS, `--apple-use-keychain` guarda la passphrase en el Llavero y la clave
+se recarga sola tras reiniciar. En Linux es `ssh-add ~/.ssh/supercomparateca`,
+y hay que repetirlo en cada sesión salvo que uses un gestor de agente.
+
 ---
 
 ## Paso 2 — Crear el servidor en Hetzner
@@ -289,7 +304,9 @@ espera y repite; no toques nada más.
 | El tipo de servidor aparece como no disponible | Capacidad agotada en esa ubicación. Prueba otra (Núremberg, Helsinki) o la serie **CPX** (AMD, también x86). **Nunca la serie CAX**: es ARM y el rol de Docker fija `arch=amd64`. |
 | `Permission denied (publickey)` al entrar como root | La clave no se marcó al crear el servidor. |
 | `Permission denied` como `deploy` tras aprovisionar | `deploy_ssh_key` en `all.yml` no es la pública que estás usando. |
-| `Permission denied (publickey)` en Ansible, pero `ssh -i ...` sí entra | Falta `ansible_ssh_private_key_file` en el inventario. |
+| `Permission denied (publickey)` en Ansible, pero `ssh -i ...` sí entra | La clave tiene passphrase y no está en el agente: `ssh-add -l` lo confirma. Ansible no puede pedirla. También puede faltar `ansible_ssh_private_key_file` en el inventario. |
+| `REMOTE HOST IDENTIFICATION HAS CHANGED` | Recreaste el servidor y reutilizas la IP. Verifica la huella contra la que muestra el panel y luego `ssh-keygen -R <IP>`. |
+| La clave está en **Security → SSH keys** pero el servidor la rechaza | Tener la clave en la cuenta no la aplica sola: hay que marcarla en el formulario de **cada** servidor al crearlo. |
 | Ansible falla al conectar tras `provision.yml` | El inventario sigue con `ansible_user=root`: root ya está desactivado. |
 | El dominio no resuelve tras horas | Registro A en el sitio equivocado, o el dominio usa los nameservers de otro proveedor. |
 | `verificar-dns.sh` da una IP antigua | Caché DNS. El script consulta a 1.1.1.1 justo para evitarlo; espera al TTL. |
