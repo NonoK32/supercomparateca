@@ -2,6 +2,25 @@
 - name: Aprovisionar el servidor (base, Docker, firewall)
   hosts: web
   become: true
+  pre_tasks:
+    # El rol base desactiva el login de root y las contraseñas. Si deploy_ssh_key
+    # no es una clave real, el usuario de despliegue queda con una clave invalida
+    # y nadie puede volver a entrar al servidor por SSH. Se comprueba antes de
+    # tocar nada.
+    - name: Comprobar que deploy_ssh_key es una clave SSH real
+      ansible.builtin.assert:
+        that:
+          - deploy_ssh_key is defined
+          - deploy_ssh_key is search('^(ssh-ed25519|ssh-rsa|ecdsa-sha2-\S+) AAAA[0-9A-Za-z+/]{20,}')
+        fail_msg: >-
+          deploy_ssh_key no parece una clave SSH publica valida (¿sigue el valor
+          de ejemplo de all.yml.example?). Pega la salida de
+          `cat ~/.ssh/tu-clave.pub`. Sin esto, tras endurecer SSH nadie podria
+          entrar al servidor.
+        success_msg: deploy_ssh_key tiene pinta de clave valida.
+      run_once: true
+      delegate_to: localhost
+      become: false
   roles:
     - base
     - docker
