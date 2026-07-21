@@ -225,6 +225,14 @@ En el panel DNS de tu registrador, crea **dos registros A**:
 Borra cualquier registro A o CNAME que el registrador haya puesto por defecto
 apuntando a su página de aparcamiento.
 
+> **Si usas Cloudflare:** pon los registros en **DNS only** (nube gris), no en
+> *Proxied* (naranja, que es el valor por defecto). Con el proxy activo el
+> dominio resuelve a IPs de Cloudflare, no a tu servidor: `verificar-dns.sh`
+> fallará y Traefik no podrá emitir su certificado. Además, Cloudflare en modo
+> *Flexible* delante de un Traefik que redirige 80→443 provoca un **bucle
+> infinito de redirecciones**. Si más adelante quieres el proxy, actívalo
+> **después** de tener el certificado en el origen y con SSL en *Full (strict)*.
+
 > **No crees registros AAAA todavía**, aunque el servidor tenga IPv6 (Hetzner lo
 > da activado y gratis). Si existe un AAAA, Let's Encrypt **prefiere IPv6** para
 > el reto HTTP-01: si Traefik no está escuchando ahí, el reto falla y consume
