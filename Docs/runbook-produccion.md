@@ -275,6 +275,59 @@ espera y repite; no toques nada más.
 
 ---
 
+---
+
+## Paso 7 — Ensayo con el staging de Let's Encrypt (tarea 13.3)
+
+Antes del primer despliegue real se ensaya contra la CA de pruebas. Emite
+certificados que el navegador **no** reconoce, pero el flujo ACME es idéntico y
+los límites son mucho más altos: puedes fallar todas las veces que haga falta
+sin quedarte bloqueado.
+
+**1. Prepara el `.env` en el servidor.** Cópialo a `{{ app_dir }}` con los
+secretos reales y, para el ensayo, con la CA de staging descomentada:
+
+```bash
+DOMAIN=supercomparateca.com
+ACME_EMAIL=tu-email@dominio.com
+ACME_CASERVER=https://acme-staging-v02.api.letsencrypt.org/directory
+JWT_SECRET_KEY=<openssl rand -hex 32>
+POSTGRES_USER=...
+POSTGRES_PASSWORD=...
+POSTGRES_DB=...
+```
+
+**2. Comprueba el DNS antes de levantar nada:**
+
+```bash
+./scripts/verificar-dns.sh supercomparateca.com <IP>
+```
+
+**3. Levanta el stack** (desde el servidor, en `app_dir`):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+**4. Comprueba que el certificado ha llegado:**
+
+```bash
+./scripts/verificar-tls.sh supercomparateca.com
+```
+
+Debe decir **STAGING**. Si dice que Traefik sirve su certificado por defecto,
+el reto ha fallado: mira `docker compose logs reverse-proxy`.
+
+**5. Pasa a producción.** Comenta `ACME_CASERVER` en el `.env` y **borra el
+volumen de certificados** — sin esto Traefik reutiliza el de staging:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+docker volume rm supercomparateca_letsencrypt
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+./scripts/verificar-tls.sh supercomparateca.com     # ahora: PRODUCCIÓN
+```
+
 ## Estado al terminar
 
 - [ ] Clave SSH creada, con la privada solo en tu máquina

@@ -17,6 +17,11 @@ services:
       - --entrypoints.websecure.address=:443
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      # Por defecto, la CA de producción. Para ensayar sin gastar cuota, pon en
+      # .env ACME_CASERVER con la de staging (ver .env.example). Al cambiar de
+      # una a otra hay que borrar el volumen letsencrypt: si no, Traefik
+      # reutiliza el certificado que ya tiene guardado.
+      - --certificatesresolvers.le.acme.caserver=${ACME_CASERVER:-https://acme-v02.api.letsencrypt.org/directory}
       - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.le.acme.httpchallenge=true
