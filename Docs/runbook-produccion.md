@@ -198,6 +198,13 @@ En el panel DNS de tu registrador, crea **dos registros A**:
 Borra cualquier registro A o CNAME que el registrador haya puesto por defecto
 apuntando a su página de aparcamiento.
 
+> **No crees registros AAAA todavía**, aunque el servidor tenga IPv6 (Hetzner lo
+> da activado y gratis). Si existe un AAAA, Let's Encrypt **prefiere IPv6** para
+> el reto HTTP-01: si Traefik no está escuchando ahí, el reto falla y consume
+> cuota, con el DNS aparentemente bien puesto y todo funcionando por IPv4. Es un
+> fallo desconcertante y fácil de evitar. Añade el AAAA más adelante, si quieres,
+> **después** de comprobar que el sitio responde por IPv6.
+
 ---
 
 ## Paso 6 — Verificar antes de desplegar
