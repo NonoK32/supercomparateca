@@ -257,6 +257,22 @@ espera y repite; no toques nada más.
 - [ ] Registros A (`@` y `www`) apuntando a la IP, TTL 300
 - [ ] `verificar-dns.sh` en verde
 
+## Costes: lo que conviene saber antes de la primera factura
+
+- **Apagar un servidor no detiene el cobro.** En Hetzner se factura por recursos
+  reservados, no por uso: un servidor apagado cuesta lo mismo. Para dejar de
+  pagar hay que **borrarlo**. (En AWS EC2 es distinto; no generalices.)
+- **La IPv4 primaria se factura aparte y sigue corriendo aunque no esté asociada
+  a ningún servidor.** Al borrar un servidor, revisa **Primary IPs** y borra las
+  que queden huérfanas.
+- **Rescalar sube, pero no baja del todo:** CPU y RAM se pueden reducir, pero el
+  **disco solo puede crecer**. Un CPX21 (80 GB) no puede pasar a CX22 (40 GB), ni
+  siquiera vía snapshot. La forma de "bajar" es **recrear** el servidor y volver
+  a lanzar `provision.yml` + `deploy.yml`: para eso la infraestructura es código.
+- El requisito de **4 GB de RAM es temporal**: viene de compilar las imágenes en
+  el servidor. Tras la tarea 13.4 (registry + CI) el servidor solo se las
+  descarga, y una máquina de 2 GB basta.
+
 ## Qué viene después
 
 1. **13.3 — ensayo con el staging de Let's Encrypt.** Diez minutos de trabajo
