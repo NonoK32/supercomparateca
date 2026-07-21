@@ -18,6 +18,10 @@
   ansible.builtin.user:
     name: "{{ deploy_user }}"
     groups: sudo
+    # Sin append, el modulo fija la lista exacta de grupos secundarios y le
+    # quitaria el grupo docker que anade el rol docker: los dos roles se
+    # pisarian en cada ejecucion y el playbook nunca convergeria.
+    append: true
     shell: /bin/bash
     create_home: true
 
