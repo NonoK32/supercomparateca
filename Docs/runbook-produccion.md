@@ -142,7 +142,12 @@ supercomparateca ansible_host=203.0.113.10 ansible_user=root ansible_ssh_private
 > otra para GitHub). Sin ella Ansible prueba las de por defecto y falla con
 > `Permission denied (publickey)` aunque el `ssh -i ...` a mano te funcione.
 
-Edita `group_vars/all.yml` y pega tu clave **pública** en `deploy_ssh_key`:
+Edita `group_vars/all.yml` y pega tu clave **pública** en `deploy_ssh_key`.
+**Este es el campo más peligroso del runbook:** si lo dejas con el valor de
+ejemplo, el usuario `deploy` se queda con una clave inválida y, como el playbook
+desactiva a la vez el login de root y las contraseñas, **te quedas fuera del
+servidor**. Desde el commit `8dd77a1` el playbook aborta antes de tocar nada si
+detecta el placeholder, pero revísalo igualmente:
 
 ```yaml
 deploy_user: deploy
@@ -307,6 +312,7 @@ espera y repite; no toques nada más.
 | `Permission denied (publickey)` en Ansible, pero `ssh -i ...` sí entra | La clave tiene passphrase y no está en el agente: `ssh-add -l` lo confirma. Ansible no puede pedirla. También puede faltar `ansible_ssh_private_key_file` en el inventario. |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` | Recreaste el servidor y reutilizas la IP. Verifica la huella contra la que muestra el panel y luego `ssh-keygen -R <IP>`. |
 | La clave está en **Security → SSH keys** pero el servidor la rechaza | Tener la clave en la cuenta no la aplica sola: hay que marcarla en el formulario de **cada** servidor al crearlo. |
+| **Fuera del servidor: ni `root` ni `deploy` entran tras aprovisionar** | `deploy_ssh_key` no era una clave válida. Recupéralo con **Rebuild** desde el panel (mantiene servidor e IP y reaplica las claves asignadas), corrige `all.yml` y relanza. No hace falta borrar el servidor. |
 | Ansible falla al conectar tras `provision.yml` | El inventario sigue con `ansible_user=root`: root ya está desactivado. |
 | El dominio no resuelve tras horas | Registro A en el sitio equivocado, o el dominio usa los nameservers de otro proveedor. |
 | `verificar-dns.sh` da una IP antigua | Caché DNS. El script consulta a 1.1.1.1 justo para evitarlo; espera al TTL. |
