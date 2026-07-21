@@ -22,6 +22,7 @@ Necesitas, en tu máquina:
 ssh -V              # cualquier OpenSSH reciente
 ansible --version   # si falta:  brew install ansible
 dig -v              # viene con macOS
+nc -h               # para verificar-dns.sh; viene con macOS
 ```
 
 Y dos cosas que cuestan dinero (poco): una cuenta de Hetzner Cloud (~4 €/mes el
@@ -115,12 +116,16 @@ cp group_vars/all.yml.example group_vars/all.yml
 ```
 
 Edita `inventory.ini` con tu IP real (déjalo con `ansible_user=root`: esta
-primera vez todavía se entra como root):
+primera vez todavía se entra como root) y con la ruta de tu clave privada:
 
 ```ini
 [web]
-supercomparateca ansible_host=203.0.113.10 ansible_user=root
+supercomparateca ansible_host=203.0.113.10 ansible_user=root ansible_ssh_private_key_file=~/.ssh/supercomparateca
 ```
+
+> `ansible_ssh_private_key_file` importa si tienes varias claves (por ejemplo,
+> otra para GitHub). Sin ella Ansible prueba las de por defecto y falla con
+> `Permission denied (publickey)` aunque el `ssh -i ...` a mano te funcione.
 
 Edita `group_vars/all.yml` y pega tu clave **pública** en `deploy_ssh_key`:
 
@@ -267,6 +272,7 @@ espera y repite; no toques nada más.
 |---|---|
 | `Permission denied (publickey)` al entrar como root | La clave no se marcó al crear el servidor. |
 | `Permission denied` como `deploy` tras aprovisionar | `deploy_ssh_key` en `all.yml` no es la pública que estás usando. |
+| `Permission denied (publickey)` en Ansible, pero `ssh -i ...` sí entra | Falta `ansible_ssh_private_key_file` en el inventario. |
 | Ansible falla al conectar tras `provision.yml` | El inventario sigue con `ansible_user=root`: root ya está desactivado. |
 | El dominio no resuelve tras horas | Registro A en el sitio equivocado, o el dominio usa los nameservers de otro proveedor. |
 | `verificar-dns.sh` da una IP antigua | Caché DNS. El script consulta a 1.1.1.1 justo para evitarlo; espera al TTL. |
