@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..seguridad import get_current_user
+from ..seguridad import get_admin_user, get_current_user
 
 router = APIRouter(
     prefix="/supermercados",
@@ -42,7 +42,11 @@ def obtener(sm_id: int, db: Session = Depends(get_db)):
     return sm
 
 
-@router.patch("/{sm_id}", response_model=schemas.SupermercadoRead)
+@router.patch(
+    "/{sm_id}",
+    response_model=schemas.SupermercadoRead,
+    dependencies=[Depends(get_admin_user)],
+)
 def actualizar(
     sm_id: int, payload: schemas.SupermercadoUpdate, db: Session = Depends(get_db)
 ):
@@ -62,7 +66,11 @@ def actualizar(
     return sm
 
 
-@router.delete("/{sm_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{sm_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(get_admin_user)],
+)
 def eliminar(sm_id: int, db: Session = Depends(get_db)):
     sm = db.get(models.Supermercado, sm_id)
     if sm is None:

@@ -11,18 +11,27 @@ from . import matching, models
 
 
 def buscar_alias(
-    db: Session, supermercado_id: int, texto: str
+    db: Session, supermercado_id: int, texto: str, usuario_id: int
 ) -> models.AliasProducto | None:
-    """Alias exacto conocido para un texto en un supermercado (§5bis punto 1)."""
-    return db.scalar(
-        select(models.AliasProducto).where(
-            models.AliasProducto.supermercado_id == supermercado_id,
-            models.AliasProducto.texto_alias == texto,
-        )
+    """Alias exacto para un texto en un supermercado (§5bis punto 1).
+
+    El alias propio del usuario gana; si no tiene ninguno, se usa el de la
+    comunidad (Fase 3: el aprendizaje se comparte, pero cada uno puede
+    discrepar). Entre alias ajenos gana el más reciente.
+    """
+    base = select(models.AliasProducto).where(
+        models.AliasProducto.supermercado_id == supermercado_id,
+        models.AliasProducto.texto_alias == texto,
     )
+    propio = db.scalar(base.where(models.AliasProducto.usuario_id == usuario_id))
+    if propio is not None:
+        return propio
+    return db.scalar(base.order_by(models.AliasProducto.id.desc()))
 
 
-def resolver_producto(db: Session, supermercado_id: int, texto: str) -> int | None:
+def resolver_producto(
+    db: Session, supermercado_id: int, texto: str, usuario_id: int
+) -> int | None:
     """Producto que corresponde a un texto de ticket, sin intervención del usuario.
 
     Aplica §5bis en orden: alias exacto (punto 1) y, si no lo hay, el alias más
@@ -31,30 +40,42 @@ def resolver_producto(db: Session, supermercado_id: int, texto: str) -> int | No
     sugerencias de la zona dudosa se consultan aparte, vía
     `GET /lineas/{id}/sugerencias`.
     """
-    alias = buscar_alias(db, supermercado_id, texto)
+    alias = buscar_alias(db, supermercado_id, texto, usuario_id)
     if alias is not None:
         return alias.producto_id
 
-    candidato = matching.mejor_candidato_automatico(db, supermercado_id, texto)
+    candidato = matching.mejor_candidato_automatico(
+        db, supermercado_id, texto, usuario_id
+    )
     return candidato.producto_id if candidato is not None else None
 
 
 def upsert_alias(
-    db: Session, supermercado_id: int, texto: str, producto_id: int
+    db: Session, supermercado_id: int, texto: str, producto_id: int, usuario_id: int
 ) -> None:
-    """Guarda o actualiza la asociación texto↔producto. La última confirmación
-    del usuario gana (§5bis punto 4: corrección siempre disponible)."""
-    alias = buscar_alias(db, supermercado_id, texto)
-    if alias is None:
+    """Guarda o actualiza la asociación texto↔producto **del usuario**.
+
+    La última confirmación gana (§5bis punto 4), pero solo sobre su propio
+    alias: corregir nunca le cambia el producto a otro usuario.
+    """
+    propio = db.scalar(
+        select(models.AliasProducto).where(
+            models.AliasProducto.supermercado_id == supermercado_id,
+            models.AliasProducto.texto_alias == texto,
+            models.AliasProducto.usuario_id == usuario_id,
+        )
+    )
+    if propio is None:
         db.add(
             models.AliasProducto(
                 supermercado_id=supermercado_id,
                 texto_alias=texto,
                 producto_id=producto_id,
+                usuario_id=usuario_id,
             )
         )
     else:
-        alias.producto_id = producto_id
+        propio.producto_id = producto_id
 
 
 def recalcular_estado(ticket: models.Ticket) -> None:

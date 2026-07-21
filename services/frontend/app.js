@@ -313,6 +313,61 @@ function mostrarComparativa(data) {
   cont.appendChild(tabla);
 }
 
+// ---- Cesta habitual (FR10) ----
+$("btn-cesta").addEventListener("click", async () => {
+  try {
+    mostrarCesta(await api("/cesta/comparativa"));
+  } catch (err) {
+    mensaje(err.message, true);
+  }
+});
+
+function mostrarCesta(data) {
+  const cont = $("resultado-cesta");
+  cont.textContent = "";
+  if (!data.productos.length) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "Aún no has confirmado productos en tus tickets.";
+    cont.appendChild(p);
+    return;
+  }
+
+  const resumen = document.createElement("p");
+  resumen.className = "muted";
+  resumen.textContent =
+    "Tu cesta: " +
+    data.productos.map((p) => `${p.nombre_normalizado} (×${p.veces_comprado})`).join(", ");
+  cont.appendChild(resumen);
+
+  const tabla = document.createElement("table");
+  const thead = document.createElement("thead");
+  const trHead = document.createElement("tr");
+  for (const titulo of ["Supermercado", "Total cesta", "Productos con precio"]) {
+    const th = document.createElement("th");
+    th.textContent = titulo;
+    trHead.appendChild(th);
+  }
+  thead.appendChild(trHead);
+  tabla.appendChild(thead);
+
+  const total = data.productos.length;
+  const tbody = document.createElement("tbody");
+  data.supermercados.forEach((s, i) => {
+    const tr = document.createElement("tr");
+    // La API ordena por cobertura y luego por total: el primero es el mejor
+    // candidato real, no solo el de suma más baja.
+    tr.append(
+      celda(s.supermercado, i === 0 ? "barato" : ""),
+      celda(`${s.total} €`),
+      celda(`${s.productos_cubiertos} de ${total}`),
+    );
+    tbody.appendChild(tr);
+  });
+  tabla.appendChild(tbody);
+  cont.appendChild(tabla);
+}
+
 // ---- Arranque ----
 if (token) {
   mostrarApp();

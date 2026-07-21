@@ -136,6 +136,50 @@ def paso_no_sugiere(context):
     assert _sugerencias_primera_linea(context) == []
 
 
+# ---- Multiusuario ----
+@when('entra otro usuario "{email}"')
+def paso_otro_usuario(context, email):
+    _autenticar(context, email=email)
+
+
+@when('asocio la primera línea al producto existente "{nombre}"')
+def paso_asocio_producto_existente(context, nombre):
+    productos = context.client.get("/productos").json()
+    producto_id = next(p["id"] for p in productos if p["nombre_normalizado"] == nombre)
+    linea_id = context.ticket["lineas"][0]["id"]
+    resp = context.client.post(
+        f"/lineas/{linea_id}/asociar", json={"producto_id": producto_id}
+    )
+    assert resp.status_code == 200, resp.text
+
+
+@when('intento borrar el supermercado "{nombre}"')
+def paso_borrar_supermercado(context, nombre):
+    context.response = context.client.delete(
+        f"/supermercados/{context.supermercados[nombre]}"
+    )
+
+
+@when("consulto la comparativa de mi cesta habitual")
+def paso_comparativa_cesta(context):
+    resp = context.client.get("/cesta/comparativa")
+    assert resp.status_code == 200, resp.text
+    context.cesta = resp.json()
+
+
+@then('mi cesta habitual incluye "{nombre}"')
+def paso_cesta_incluye(context, nombre):
+    nombres = [p["nombre_normalizado"] for p in context.cesta["productos"]]
+    assert nombre in nombres, nombres
+
+
+@then('la cesta sale más barata en "{nombre}"')
+def paso_cesta_mas_barata(context, nombre):
+    sms = context.cesta["supermercados"]
+    assert sms, "la comparativa de la cesta está vacía"
+    assert sms[0]["supermercado"] == nombre, sms
+
+
 # ---- Precios ----
 @then('el producto "{nombre}" cuesta menos en "{barato}" que en "{caro}"')
 def paso_comparativa(context, nombre, barato, caro):

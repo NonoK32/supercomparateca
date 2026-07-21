@@ -18,6 +18,7 @@ class UsuarioRead(BaseModel):
     id: int
     nombre: str
     email: EmailStr
+    rol: str
     fecha_registro: datetime
 
 
@@ -117,6 +118,27 @@ class PuntoHistorico(BaseModel):
 class HistoricoPrecios(BaseModel):
     producto_id: int
     historico: list[PuntoHistorico]
+
+
+class ProductoCesta(BaseModel):
+    producto_id: int
+    nombre_normalizado: str
+    veces_comprado: int
+
+
+class TotalSupermercado(BaseModel):
+    supermercado_id: int
+    supermercado: str
+    total: Decimal
+    productos_cubiertos: int
+
+
+class ComparativaCesta(BaseModel):
+    """FR10: coste de la cesta habitual en cada supermercado. `productos_cubiertos`
+    dice sobre cuántos de la cesta se ha podido calcular el total."""
+
+    productos: list[ProductoCesta]
+    supermercados: list[TotalSupermercado]
 
 
 class SugerenciaProducto(BaseModel):

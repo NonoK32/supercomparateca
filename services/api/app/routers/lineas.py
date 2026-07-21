@@ -30,7 +30,7 @@ def sugerencias(
     punto 3). Se calculan al vuelo: así reflejan siempre los alias actuales."""
     linea = _linea_propia(linea_id, usuario, db)
     candidatos = matching.buscar_similares(
-        db, linea.ticket.supermercado_id, linea.texto_original
+        db, linea.ticket.supermercado_id, linea.texto_original, usuario.id
     )
     return [
         schemas.SugerenciaProducto(
@@ -72,7 +72,7 @@ def asociar(
     linea.producto_id = producto.id
     ticket = linea.ticket
     asociacion.upsert_alias(
-        db, ticket.supermercado_id, linea.texto_original, producto.id
+        db, ticket.supermercado_id, linea.texto_original, producto.id, usuario.id
     )
     asociacion.recalcular_estado(ticket)
 

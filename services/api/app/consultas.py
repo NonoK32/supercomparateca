@@ -5,7 +5,9 @@ El histórico son las `LineaTicket` asociadas a un producto, unidas a su `Ticket
 agregación se hace en Python sobre una única query.
 """
 
-from sqlalchemy import select
+from decimal import Decimal
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import models
@@ -50,6 +52,69 @@ def precios_por_supermercado(db: Session, producto_id: int) -> list[dict]:
         entrada["precio_actual"] = fila.precio_total
         entrada["fecha"] = fila.fecha_compra
     return sorted(por_sm.values(), key=lambda e: e["precio_actual"])
+
+
+def cesta_habitual(db: Session, usuario_id: int, limite: int = 10) -> list[dict]:
+    """Los productos que este usuario compra más a menudo (FR10).
+
+    "Habitual" = número de veces que aparece en sus tickets. Se deriva del
+    histórico, así que no hay ninguna cesta que mantener a mano.
+    """
+    filas = db.execute(
+        select(
+            models.LineaTicket.producto_id,
+            models.Producto.nombre_normalizado,
+            func.count(models.LineaTicket.id).label("veces"),
+        )
+        .join(models.Ticket, models.LineaTicket.ticket_id == models.Ticket.id)
+        .join(models.Producto, models.LineaTicket.producto_id == models.Producto.id)
+        .where(models.Ticket.usuario_id == usuario_id)
+        .group_by(models.LineaTicket.producto_id, models.Producto.nombre_normalizado)
+        .order_by(func.count(models.LineaTicket.id).desc(), models.Producto.nombre_normalizado)
+        .limit(limite)
+    ).all()
+    return [
+        {
+            "producto_id": fila.producto_id,
+            "nombre_normalizado": fila.nombre_normalizado,
+            "veces_comprado": fila.veces,
+        }
+        for fila in filas
+    ]
+
+
+def comparativa_cesta(db: Session, usuario_id: int, limite: int = 10) -> dict:
+    """Coste total de la cesta habitual en cada supermercado (FR10).
+
+    Los precios son los del histórico **compartido** (Fase 3): se usa el más
+    reciente de cada producto en cada supermercado, venga del ticket de quien
+    venga. Un supermercado rara vez tiene precio de todos los productos, así
+    que se informa de `productos_cubiertos`: sin eso, el que solo tiene dos
+    productos parecería el más barato. Por eso el orden es cobertura primero,
+    y a igual cobertura el total más bajo.
+    """
+    cesta = cesta_habitual(db, usuario_id, limite)
+
+    totales: dict[int, dict] = {}
+    for item in cesta:
+        for precio in precios_por_supermercado(db, item["producto_id"]):
+            entrada = totales.setdefault(
+                precio["supermercado_id"],
+                {
+                    "supermercado_id": precio["supermercado_id"],
+                    "supermercado": precio["supermercado"],
+                    "total": Decimal("0"),
+                    "productos_cubiertos": 0,
+                },
+            )
+            entrada["total"] += precio["precio_actual"]
+            entrada["productos_cubiertos"] += 1
+
+    supermercados = sorted(
+        totales.values(),
+        key=lambda e: (-e["productos_cubiertos"], e["total"]),
+    )
+    return {"productos": cesta, "supermercados": supermercados}
 
 
 def historico(

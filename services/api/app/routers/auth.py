@@ -20,10 +20,16 @@ def registro(payload: schemas.UsuarioCreate, db: Session = Depends(get_db)):
     if existe is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe un usuario con ese email")
 
+    # El primero que se registra administra el catálogo global; el resto son
+    # usuarios normales (pueden crear productos, pero no editar ni borrar los
+    # que ya usan los demás).
+    primero = db.scalar(select(models.Usuario.id).limit(1)) is None
+
     usuario = models.Usuario(
         nombre=payload.nombre,
         email=payload.email,
         password_hash=seguridad.hash_password(payload.password),
+        rol="admin" if primero else "usuario",
     )
     db.add(usuario)
     try:

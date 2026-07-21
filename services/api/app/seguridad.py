@@ -51,3 +51,15 @@ def get_current_user(
     if usuario is None:
         raise cred_exc
     return usuario
+
+
+def get_admin_user(
+    usuario: models.Usuario = Depends(get_current_user),
+) -> models.Usuario:
+    """Exige rol admin. Protege lo que es global y compartido por todos los
+    usuarios: modificar o borrar productos y supermercados."""
+    if usuario.rol != "admin":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Requiere permisos de administrador"
+        )
+    return usuario

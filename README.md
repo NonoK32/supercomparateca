@@ -52,6 +52,15 @@ El archivo `.env` está en `.gitignore` y **nunca** debe subirse al repositorio.
 Para desarrollar un servicio suelto (sin Docker), mira su `README.md`
 (`services/api`, `services/ocr-service`); en ese modo el `api` usa SQLite.
 
+El **primer usuario que se registra es administrador**: es el único que puede
+modificar o borrar productos y supermercados, que son compartidos por todos.
+
+> ⚠️ **Esquema:** las tablas se crean con `create_all` al arrancar, que **no
+> altera tablas ya existentes** (Alembic está pendiente). Si vienes de una
+> versión anterior a la Fase 3, la base de datos no tendrá las columnas
+> `usuarios.rol` ni `alias_producto.usuario_id`: en desarrollo, recréala con
+> `docker compose down -v`.
+
 ## Despliegue (producción)
 
 - **Aprovisionamiento** del servidor (Hetzner) con Ansible: ver
@@ -71,8 +80,8 @@ Para desarrollar un servicio suelto (sin Docker), mira su `README.md`
 ## Roadmap (fases)
 
 - **MVP (Fase 1):** un usuario; asociación manual línea↔producto; histórico y comparativa; frontend simple.
-- **Fase 2:** matching automático de productos por similitud de texto.
-- **Fase 3:** multiusuario con datos de precios compartidos y seguridad completa.
+- **Fase 2:** ✅ matching automático de productos por similitud de texto.
+- **Fase 3:** ✅ multiusuario con datos de precios compartidos, rol admin y cesta habitual.
 - **Fase 4 (opcional):** migración a k3s.
 
 ## Convenciones de commits

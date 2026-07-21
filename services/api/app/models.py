@@ -23,6 +23,9 @@ class Usuario(Base):
     nombre: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    # "usuario" | "admin". Solo admin puede modificar/borrar los datos globales
+    # (productos, supermercados) de los que dependen todos los demás.
+    rol: Mapped[str] = mapped_column(String(20), default="usuario")
     fecha_registro: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -79,16 +82,27 @@ class LineaTicket(Base):
 class AliasProducto(Base):
     """Aprendizaje: qué producto corresponde a un texto de ticket, por supermercado.
 
-    Un mismo texto en un supermercado apunta a un único producto (unicidad), pero
-    el mismo producto puede tener varios alias y en distintos supermercados.
+    El aprendizaje es compartido entre usuarios (Fase 3), pero cada uno puede
+    discrepar: un alias pertenece a quien lo confirmó (`usuario_id`) y, al
+    resolver un texto, el alias propio gana sobre el de la comunidad. Así la
+    corrección de un usuario no le pisa el producto a los demás.
+
+    `usuario_id` es nullable para admitir alias sin dueño (datos heredados o
+    sembrados). La unicidad es por usuario: dos personas pueden mapear el mismo
+    texto a productos distintos.
     """
 
     __tablename__ = "alias_producto"
     __table_args__ = (
-        UniqueConstraint("supermercado_id", "texto_alias", name="uq_alias_sm_texto"),
+        UniqueConstraint(
+            "usuario_id", "supermercado_id", "texto_alias", name="uq_alias_sm_texto"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     producto_id: Mapped[int] = mapped_column(ForeignKey("productos.id"))
     supermercado_id: Mapped[int] = mapped_column(ForeignKey("supermercados.id"))
     texto_alias: Mapped[str] = mapped_column(String(300), index=True)
+    usuario_id: Mapped[int | None] = mapped_column(
+        ForeignKey("usuarios.id"), default=None
+    )

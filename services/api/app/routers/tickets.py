@@ -49,7 +49,7 @@ def subir(
             precio_total=linea.precio_total,
         )
         nueva.producto_id = asociacion.resolver_producto(
-            db, supermercado_id, linea.texto_original
+            db, supermercado_id, linea.texto_original, usuario.id
         )
         ticket.lineas.append(nueva)
 

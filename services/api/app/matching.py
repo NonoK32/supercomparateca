@@ -52,8 +52,37 @@ def _similitud(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
+def _alias_visibles(
+    db: Session, supermercado_id: int, usuario_id: int
+) -> list[models.AliasProducto]:
+    """Alias que valen para este usuario: los suyos, más los de la comunidad
+    para los textos que él no ha confirmado nunca.
+
+    Misma precedencia que `asociacion.buscar_alias`, para que el fuzzy no le
+    asigne el mapeo de otro usuario a un texto que él ya ha corregido.
+    """
+    todos = db.scalars(
+        select(models.AliasProducto)
+        .where(models.AliasProducto.supermercado_id == supermercado_id)
+        .order_by(models.AliasProducto.id)
+    ).all()
+
+    por_texto: dict[str, models.AliasProducto] = {}
+    for alias in todos:
+        clave = normalizar(alias.texto_alias)
+        actual = por_texto.get(clave)
+        # El propio gana siempre; entre ajenos, el más reciente (orden por id).
+        if actual is None or actual.usuario_id != usuario_id:
+            por_texto[clave] = alias
+    return list(por_texto.values())
+
+
 def buscar_similares(
-    db: Session, supermercado_id: int, texto: str, minimo: float | None = None
+    db: Session,
+    supermercado_id: int,
+    texto: str,
+    usuario_id: int,
+    minimo: float | None = None,
 ) -> list[Candidato]:
     """Alias del supermercado parecidos a `texto`, de más a menos parecido.
 
@@ -67,14 +96,8 @@ def buscar_similares(
     if not objetivo:
         return []
 
-    alias_lista = db.scalars(
-        select(models.AliasProducto).where(
-            models.AliasProducto.supermercado_id == supermercado_id
-        )
-    ).all()
-
     mejores: dict[int, Candidato] = {}
-    for alias in alias_lista:
+    for alias in _alias_visibles(db, supermercado_id, usuario_id):
         score = _similitud(objetivo, normalizar(alias.texto_alias))
         if score < minimo:
             continue
@@ -90,7 +113,7 @@ def buscar_similares(
 
 
 def mejor_candidato_automatico(
-    db: Session, supermercado_id: int, texto: str
+    db: Session, supermercado_id: int, texto: str, usuario_id: int
 ) -> Candidato | None:
     """Candidato lo bastante bueno como para asignarlo sin preguntar.
 
@@ -99,7 +122,7 @@ def mejor_candidato_automatico(
     medias).
     """
     candidatos = buscar_similares(
-        db, supermercado_id, texto, minimo=settings.umbral_auto
+        db, supermercado_id, texto, usuario_id, minimo=settings.umbral_auto
     )
     if not candidatos:
         return None

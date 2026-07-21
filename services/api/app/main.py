@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import Base, engine
-from .routers import auth, lineas, productos, supermercados, tickets
+from .routers import auth, cesta, lineas, productos, supermercados, tickets
 
 
 @asynccontextmanager
@@ -36,3 +36,4 @@ app.include_router(supermercados.router)
 app.include_router(productos.router)
 app.include_router(tickets.router)
 app.include_router(lineas.router)
+app.include_router(cesta.router)
