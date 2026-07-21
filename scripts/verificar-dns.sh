@@ -19,13 +19,27 @@ IP_ESPERADA="$2"
 fallo=0
 
 resolver() {
-  # Se consulta a un resolver público: el DNS de tu router/ISP puede tener
-  # cacheada la respuesta antigua y darte un falso positivo (o negativo).
-  if command -v dig >/dev/null 2>&1; then
-    dig +short A "$1" @1.1.1.1 | tail -1
-  else
-    getent hosts "$1" | awk '{print $1}' | tail -1
+  local nombre="$1" ip=""
+
+  # DNS sobre HTTPS primero. Muchos ISP interceptan el puerto 53 y responden
+  # ellos aunque preguntes a 1.1.1.1: dig descarta esa respuesta ("reply from
+  # unexpected source") y devuelve vacio, lo que parecia "no resuelve". DoH va
+  # por 443 cifrado y no se puede interceptar asi.
+  if command -v curl >/dev/null 2>&1; then
+    ip="$(curl -s -m 10 -H 'accept: application/dns-json' \
+      "https://cloudflare-dns.com/dns-query?name=${nombre}&type=A" 2>/dev/null \
+      | tr ',' '\n' | grep -o '"data":"[0-9.]\{7,\}"' | cut -d'"' -f4 | tail -1)"
   fi
+
+  # Respaldo si no hay curl o no hay salida a internet por HTTPS.
+  if [ -z "$ip" ] && command -v dig >/dev/null 2>&1; then
+    ip="$(dig +short A "$nombre" @1.1.1.1 | tail -1)"
+  fi
+  if [ -z "$ip" ]; then
+    ip="$(getent hosts "$nombre" 2>/dev/null | awk '{print $1}' | tail -1)"
+  fi
+
+  echo "$ip"
 }
 
 echo "Comprobando $DOMINIO -> $IP_ESPERADA"
@@ -43,8 +57,12 @@ fi
 
 # Puerto 80: imprescindible para el reto HTTP-01, aunque luego todo vaya por
 # HTTPS. Si el firewall lo bloquea, el certificado no se emite.
+#
+# Se usa curl y no nc porque `nc -w` no acota la conexion en todas las
+# plataformas: contra una IP que descarta los paquetes en silencio se queda
+# colgado. --connect-timeout si es un limite duro.
 for puerto in 80 443; do
-  if nc -z -w 5 "$IP_ESPERADA" "$puerto" 2>/dev/null; then
+  if curl -s -o /dev/null --connect-timeout 5 -m 8 "http://$IP_ESPERADA:$puerto/" 2>/dev/null; then
     echo "OK    puerto $puerto abierto en $IP_ESPERADA"
   else
     echo "AVISO puerto $puerto sin respuesta (normal si el stack aún no está levantado)"
