@@ -98,6 +98,44 @@ def paso_linea_asociada(context):
     assert context.ticket["lineas"][0]["producto_id"] is not None
 
 
+# ---- Matching por similitud ----
+@given('he confirmado que "{texto}" es el producto "{nombre}"')
+def paso_confirmar_alias(context, texto, nombre):
+    context.execute_steps(
+        f'''
+        Cuando subo la foto de un ticket de "Mercadona" con el texto:
+          """
+          {texto} 0,89
+          """
+        Y asocio la primera línea al producto nuevo "{nombre}"
+        '''
+    )
+
+
+@then("la primera línea del último ticket queda sin asociar")
+def paso_linea_sin_asociar(context):
+    assert context.ticket["lineas"][0]["producto_id"] is None
+
+
+def _sugerencias_primera_linea(context):
+    linea_id = context.ticket["lineas"][0]["id"]
+    resp = context.client.get(f"/lineas/{linea_id}/sugerencias")
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+@then('el sistema sugiere el producto "{nombre}" para la primera línea')
+def paso_sugiere_producto(context, nombre):
+    sugerencias = _sugerencias_primera_linea(context)
+    assert sugerencias, "no se ha sugerido ningún producto"
+    assert sugerencias[0]["nombre_normalizado"] == nombre, sugerencias
+
+
+@then("el sistema no sugiere ningún producto para la primera línea")
+def paso_no_sugiere(context):
+    assert _sugerencias_primera_linea(context) == []
+
+
 # ---- Precios ----
 @then('el producto "{nombre}" cuesta menos en "{barato}" que en "{caro}"')
 def paso_comparativa(context, nombre, barato, caro):

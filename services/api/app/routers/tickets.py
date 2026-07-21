@@ -48,11 +48,9 @@ def subir(
             texto_original=linea.texto_original,
             precio_total=linea.precio_total,
         )
-        # §5bis punto 1: si ya hay alias exacto para este supermercado, se
-        # asigna el producto automáticamente (sin preguntar).
-        alias = asociacion.buscar_alias(db, supermercado_id, linea.texto_original)
-        if alias is not None:
-            nueva.producto_id = alias.producto_id
+        nueva.producto_id = asociacion.resolver_producto(
+            db, supermercado_id, linea.texto_original
+        )
         ticket.lineas.append(nueva)
 
     asociacion.recalcular_estado(ticket)

@@ -119,6 +119,15 @@ class HistoricoPrecios(BaseModel):
     historico: list[PuntoHistorico]
 
 
+class SugerenciaProducto(BaseModel):
+    """Producto propuesto para una línea sin asociar (§5bis punto 3)."""
+
+    producto_id: int
+    nombre_normalizado: str
+    texto_alias: str
+    score: float
+
+
 class AsociarRequest(BaseModel):
     """Asocia una línea a un producto existente (`producto_id`) o crea/reutiliza
     uno nuevo (`nuevo_producto`). Debe indicarse exactamente uno de los dos."""

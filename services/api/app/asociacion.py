@@ -7,7 +7,7 @@ endpoint de asociación manual.
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import models
+from . import matching, models
 
 
 def buscar_alias(
@@ -20,6 +20,23 @@ def buscar_alias(
             models.AliasProducto.texto_alias == texto,
         )
     )
+
+
+def resolver_producto(db: Session, supermercado_id: int, texto: str) -> int | None:
+    """Producto que corresponde a un texto de ticket, sin intervención del usuario.
+
+    Aplica §5bis en orden: alias exacto (punto 1) y, si no lo hay, el alias más
+    parecido si supera el umbral automático (punto 3). Si ninguno convence,
+    devuelve `None` y la línea queda pendiente de confirmación (punto 2); las
+    sugerencias de la zona dudosa se consultan aparte, vía
+    `GET /lineas/{id}/sugerencias`.
+    """
+    alias = buscar_alias(db, supermercado_id, texto)
+    if alias is not None:
+        return alias.producto_id
+
+    candidato = matching.mejor_candidato_automatico(db, supermercado_id, texto)
+    return candidato.producto_id if candidato is not None else None
 
 
 def upsert_alias(

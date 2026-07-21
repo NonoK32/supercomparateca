@@ -198,9 +198,50 @@ function filaLinea(linea) {
     wrap.className = "fila";
     wrap.append(input, btn);
     tdProducto.appendChild(wrap);
+    // Zona dudosa (§5bis punto 3): en vez de teclear el producto de cero, se
+    // ofrecen los parecidos. Se piden aparte para no bloquear el pintado.
+    pintarSugerencias(linea, tdProducto);
   }
   tr.append(tdTexto, tdPrecio, tdProducto);
   return tr;
+}
+
+async function pintarSugerencias(linea, tdProducto) {
+  let sugerencias;
+  try {
+    sugerencias = await api(`/lineas/${linea.id}/sugerencias`);
+  } catch {
+    return; // Sin sugerencias siempre queda la asociación manual.
+  }
+  if (!sugerencias.length) return;
+
+  const cont = document.createElement("div");
+  cont.className = "sugerencias";
+  const etiqueta = document.createElement("span");
+  etiqueta.className = "muted";
+  etiqueta.textContent = "¿Es este producto?";
+  cont.appendChild(etiqueta);
+
+  for (const s of sugerencias.slice(0, 3)) {
+    const btn = document.createElement("button");
+    btn.className = "sec";
+    btn.textContent = s.nombre_normalizado;
+    btn.title = `Parecido a «${s.texto_alias}» (${Math.round(s.score * 100)}%)`;
+    btn.addEventListener("click", async () => {
+      try {
+        await api(`/lineas/${linea.id}/asociar`, {
+          method: "POST",
+          json: { producto_id: s.producto_id },
+        });
+        tdProducto.textContent = "✓ asociada";
+        mensaje("Línea asociada");
+      } catch (err) {
+        mensaje(err.message, true);
+      }
+    });
+    cont.appendChild(btn);
+  }
+  tdProducto.appendChild(cont);
 }
 
 // ---- Productos y comparativa ----

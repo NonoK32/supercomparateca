@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     # Orígenes permitidos para el frontend (CORS), separados por comas.
     cors_origins: str = "http://localhost:8080,http://127.0.0.1:8080"
 
+    # Matching por similitud (§5bis punto 3). Por encima de `umbral_auto` se
+    # asigna el producto sin preguntar; entre sugerencia y auto se propone al
+    # usuario. Configurables porque hay que recalibrarlos con tickets reales
+    # (y si algún día se cambia el motor de similitud).
+    umbral_auto: float = 0.92
+    umbral_sugerencia: float = 0.70
+
     @field_validator("jwt_secret_key")
     @classmethod
     def _secreto_seguro(cls, valor: str) -> str:
