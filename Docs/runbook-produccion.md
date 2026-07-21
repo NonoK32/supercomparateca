@@ -73,7 +73,8 @@ pbcopy < ~/.ssh/supercomparateca.pub
    | Type | **CX22** (2 vCPU, 4 GB) | El más pequeño que aguanta compilar imágenes Docker. En el de 2 GB la build puede morir por OOM. |
    | Networking | IPv4 pública **activada** | Sin IPv4 pública, Let's Encrypt no te alcanza. |
    | SSH keys | marca la del paso 3 | Si se te olvida, Hetzner te manda la contraseña de root por email: peor. |
-   | Firewalls / Backups | déjalos vacíos | El firewall lo pone Ansible (`ufw`); los backups los harás tú (tarea 13.5). |
+   | Firewalls | **ninguno** | El firewall lo pone Ansible con `ufw`: queda como código y reproducible (NFR4). Tener además el de Hetzner es la trampa clásica de depuración — miras `ufw status`, está bien, y el puerto lo bloquea un segundo firewall que se configura por el panel. Un solo sitio donde mirar. |
+   | Backups | **desmarcado** | Son snapshots del disco entero (20% del precio). Resuelven algo distinto de la tarea 13.5, que hace `pg_dump` de los datos (insustituibles y portables). Mientras aprendes vas a recrear el servidor varias veces: lo que te protege es que `provision.yml` sea idempotente, no un snapshot de una máquina a medio configurar. Se pueden activar más adelante. |
    | Volumes | **ninguno** | Los 40 GB del servidor sobran: las imágenes de los tickets se descartan tras el OCR. Ojo al choque de nombres: los `volumes` del `docker-compose.yml` (`pgdata`, `letsencrypt`) son volúmenes de Docker y viven en el disco del propio servidor; no hay que comprar nada. |
    | Name | `supercomparateca` | |
 
