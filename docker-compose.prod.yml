@@ -10,6 +10,13 @@
 services:
   reverse-proxy:
     image: traefik:v3.1
+    environment:
+      # El proveedor de Docker de Traefik v3.1 negocia con la API en la version
+      # 1.24, que Docker Engine 29+ ya no acepta (minima: 1.40). Sin esto Traefik
+      # no puede leer los contenedores, no descubre ninguna ruta y, por tanto,
+      # nunca pide certificado: sirve su autofirmado por defecto.
+      # Alternativa a futuro: subir la imagen a un Traefik mas reciente.
+      DOCKER_API_VERSION: "1.44"
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
