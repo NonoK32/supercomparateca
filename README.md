@@ -63,6 +63,8 @@ modificar o borrar productos y supermercados, que son compartidos por todos.
 
 ## Despliegue (producción)
 
+- **Primera vez:** sigue el [runbook de puesta en producción](Docs/runbook-produccion.md)
+  (alta del servidor en Hetzner, dominio y DNS, paso a paso).
 - **Aprovisionamiento** del servidor (Hetzner) con Ansible: ver
   [`infra/ansible/`](infra/ansible/) (Docker, firewall, usuario no-root, SSH).
 - **Reverse-proxy + HTTPS**: `docker-compose.prod.yml` añade **Traefik** con
@@ -74,8 +76,9 @@ modificar o borrar productos y supermercados, que son compartidos por todos.
   ```
 
 - **Scripts de operación** ([`scripts/`](scripts/)): `backup-db.sh` (backup de
-  PostgreSQL con retención, para cron), `healthcheck.sh` (monitorización) y
-  `deploy.sh` (despliegue/actualización).
+  PostgreSQL con retención, para cron), `healthcheck.sh` (monitorización),
+  `deploy.sh` (despliegue/actualización) y `verificar-dns.sh` (comprueba que el
+  dominio ya apunta al servidor **antes** de pedir el certificado).
 
 ## Roadmap (fases)
 
