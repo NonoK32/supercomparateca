@@ -30,6 +30,19 @@ jobs:
       - name: Tests (pytest)
         run: pytest -q
 
+      # Los tests montan el esquema con create_all desde models.py, así que
+      # pasarian aunque a alguien se le olvidara la migracion; en produccion eso
+      # es una tabla que nunca se altera. `alembic check` compara los modelos
+      # contra el resultado de aplicar las migraciones y falla si divergen.
+      - name: Migraciones al dia (alembic check)
+        if: matrix.service == 'api'
+        env:
+          JWT_SECRET_KEY: ci-secret-solo-para-comprobar-migraciones
+          DATABASE_URL: sqlite:///./ci-migraciones.db
+        run: |
+          alembic upgrade head
+          alembic check
+
   acceptance:
     name: Aceptación (Behave)
     needs: lint-test

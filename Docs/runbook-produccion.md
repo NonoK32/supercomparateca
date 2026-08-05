@@ -354,6 +354,52 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
   el servidor. Tras la tarea 13.4 (registry + CI) el servidor solo se las
   descarga, y una máquina de 2 GB basta.
 
+## Adoptar Alembic en una base de datos que ya existe
+
+**Se hace una sola vez, y hay que hacerlo ANTES de desplegar la versión que
+incluye Alembic.** La base de datos de producción se creó con `create_all`, así
+que ya tiene las tablas pero **no** tiene la tabla `alembic_version`. Si se
+despliega sin más, el `entrypoint.sh` intentará aplicar la migración inicial,
+chocará con las tablas existentes (`relation "productos" already exists`) y el
+contenedor del `api` no arrancará.
+
+La solución es marcar la migración como aplicada **sin ejecutarla**. Es seguro
+porque el esquema que genera la migración inicial es idéntico —columnas, tipos,
+nullability, claves foráneas e índices— al que dejó `create_all`.
+
+```bash
+# En el servidor, como deploy (con sudo: .env es root:root 600)
+cd /opt/supercomparateca
+
+# 0. Backup ANTES de tocar nada. Si algo sale mal, esto es la vuelta atrás.
+sudo ./scripts/backup-db.sh prod
+
+# 1. Traer el código nuevo SIN levantar todavía
+sudo git pull --ff-only
+
+# 2. Construir la imagen del api (trae alembic y las migraciones)
+sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml build api
+
+# 3. Marcar la línea base como aplicada, sin ejecutar el DDL.
+#    `run` crea un contenedor de un solo uso: no arranca la API.
+sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  run --rm --entrypoint alembic api stamp head
+
+# 4. Comprobar que la BD dice estar al día
+sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  run --rm --entrypoint alembic api current    # debe imprimir la revisión (head)
+
+# 5. Ahora sí, desplegar
+sudo ./scripts/deploy.sh prod
+```
+
+A partir de aquí el ciclo normal es solo el paso 5: `entrypoint.sh` aplica
+`alembic upgrade head` en cada arranque y no hay nada más que hacer a mano.
+
+> Si el paso 3 se olvida, el síntoma es claro: el contenedor del `api` reinicia
+> en bucle y `docker compose logs api` muestra `DuplicateTable`. No se pierde
+> nada: para el stack, haz el `stamp` y vuelve a levantar.
+
 ## Qué viene después
 
 1. **13.3 — ensayo con el staging de Let's Encrypt.** Diez minutos de trabajo
@@ -361,7 +407,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
    antes del primer despliegue real.
 2. **Regístrate tú el primero** en cuanto la app esté en pie: el primer usuario
    que se registra es administrador (ver README).
-3. **13.5 — cron de backups**, en cuanto tengas datos que te dolería perder.
+3. **13.4 — registry + CD:** hoy las imágenes se compilan en el servidor, que es
+   lento y obliga a tener 4 GB de RAM.
+4. **13.6 — secretos:** el `.env` se sigue copiando a mano.
 
 ## Si algo va mal
 

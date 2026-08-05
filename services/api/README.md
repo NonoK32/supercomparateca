@@ -33,11 +33,23 @@ Variable `OCR_SERVICE_URL` para localizar al `ocr-service` (por defecto
 
 ## Stack
 
-FastAPI · SQLAlchemy 2.0 · Pydantic v2 · pytest · ruff.
+FastAPI · SQLAlchemy 2.0 · Alembic · Pydantic v2 · pytest · ruff.
 
 En dev/tests se usa **SQLite** por defecto; en producción se inyecta `DATABASE_URL`
-apuntando a PostgreSQL. El esquema se crea con `create_all` al arrancar (se migrará
-a Alembic cuando el modelo se estabilice).
+apuntando a PostgreSQL. El esquema está versionado con **Alembic** (`migraciones/`);
+la app no crea tablas al arrancar.
+
+### Migraciones
+
+```bash
+.venv/bin/alembic upgrade head                          # aplicar (idempotente)
+.venv/bin/alembic revision --autogenerate -m "que hace" # tras tocar models.py
+.venv/bin/alembic check                                 # ¿modelos y migraciones divergen?
+```
+
+Toda migración debe funcionar en PostgreSQL **y** en SQLite. En el contenedor,
+`entrypoint.sh` ejecuta `alembic upgrade head` antes de arrancar uvicorn y aborta
+el arranque si falla: es preferible no levantar a servir contra un esquema viejo.
 
 ## Desarrollo
 
@@ -49,6 +61,8 @@ python3 -m venv .venv
 .venv/bin/ruff check .                 # lint
 .venv/bin/pytest -q                    # tests unitarios / de API
 .venv/bin/behave                       # tests de aceptación (BDD, en features/)
+
+.venv/bin/alembic upgrade head            # crea/actualiza el esquema (la primera vez)
 .venv/bin/uvicorn app.main:app --reload   # servidor en http://127.0.0.1:8000
 ```
 
@@ -58,11 +72,13 @@ Docs interactivas (Swagger UI) en `http://127.0.0.1:8000/docs`.
 
 ```
 app/
-├── main.py       # App FastAPI, /health, montaje de routers, creación de tablas
+├── main.py       # App FastAPI, /health, montaje de routers
 ├── config.py     # Settings (DATABASE_URL) desde entorno
 ├── database.py   # Engine, SessionLocal, Base, dependencia get_db
 ├── models.py     # Modelos SQLAlchemy (Supermercado, Producto)
 ├── schemas.py    # Esquemas Pydantic (Create/Update/Read)
 └── routers/      # Endpoints CRUD por entidad
+migraciones/      # Alembic: env.py + versions/
+entrypoint.sh     # Migra (alembic upgrade head) y arranca uvicorn en el contenedor
 tests/            # pytest (BD SQLite en memoria, aislada por test)
 ```

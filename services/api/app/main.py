@@ -1,22 +1,14 @@
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .database import Base, engine
 from .routers import auth, cesta, lineas, productos, supermercados, tickets
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Crea las tablas al arrancar. Se sustituirá por Alembic cuando el modelo
-    # se estabilice.
-    Base.metadata.create_all(bind=engine)
-    yield
-
-
-app = FastAPI(title="SuperComparateca API", version="0.1.0", lifespan=lifespan)
+# El esquema NO se crea al arrancar: lo gestiona Alembic (`alembic upgrade
+# head`, que el contenedor ejecuta en su entrypoint). Con `create_all` aquí, un
+# cambio en models.py se aplicaba solo en bases de datos vacías y en producción
+# quedaba callado: la tabla existente no se altera nunca.
+app = FastAPI(title="SuperComparateca API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
