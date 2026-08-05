@@ -41,12 +41,15 @@ echo "Backup creado: $destino"
 # no se aborta el backup de la base de datos, que es lo insustituible.
 if [ "${1:-}" = "prod" ]; then
   destino_acme="$BACKUP_DIR/acme-$stamp.json"
-  if docker compose "${compose_files[@]}" cp reverse-proxy:/letsencrypt/acme.json "$destino_acme" 2>/dev/null; then
+  # El error de docker se captura en vez de descartarse: esto corre de
+  # madrugada sin nadie mirando, y un aviso que no dice por que fallo obliga a
+  # reproducirlo a mano al dia siguiente.
+  if salida_acme="$(docker compose "${compose_files[@]}" cp reverse-proxy:/letsencrypt/acme.json "$destino_acme" 2>&1)"; then
     # Contiene la clave privada del certificado.
     chmod 600 "$destino_acme"
     echo "Certificados copiados: $destino_acme"
   else
-    echo "AVISO: no se pudo copiar acme.json (¿reverse-proxy parado?); se continua."
+    echo "AVISO: no se pudo copiar acme.json; se continua. Docker dijo: $salida_acme"
   fi
 fi
 
