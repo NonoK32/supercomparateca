@@ -31,3 +31,54 @@
           - docker-compose.prod.yml
         state: present
         build: always
+
+    # --- Mantenimiento programado (13.5) ---------------------------------
+    # Los scripts existian desde la EPIC 7 pero nadie los ejecutaba: un backup
+    # que no corre no es un backup. Ambas tareas van como root porque .env es
+    # root:root 600 y los scripts lo necesitan.
+
+    - name: Crear el directorio de backups
+      ansible.builtin.file:
+        path: "{{ app_dir }}/backups"
+        state: directory
+        owner: root
+        group: root
+        # Los volcados contienen datos de usuarios y acme.json la clave privada
+        # del certificado: solo root.
+        mode: "0700"
+
+    - name: Programar el backup diario de la base de datos
+      ansible.builtin.cron:
+        name: backup-db-supercomparateca
+        user: root
+        minute: "0"
+        hour: "3"
+        job: >-
+          cd {{ app_dir }} && ./scripts/backup-db.sh prod
+          >> {{ app_dir }}/backups/backup.log 2>&1
+
+    - name: Programar el healthcheck cada 10 minutos
+      ansible.builtin.cron:
+        name: healthcheck-supercomparateca
+        user: root
+        minute: "*/10"
+        job: >-
+          cd {{ app_dir }} && ./scripts/healthcheck.sh prod
+          >> /var/log/supercomparateca-health.log 2>&1
+
+    - name: Rotar los logs de mantenimiento
+      # Sin esto, el log del healthcheck crece sin limite (144 lineas al dia).
+      ansible.builtin.copy:
+        dest: /etc/logrotate.d/supercomparateca
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          {{ app_dir }}/backups/backup.log /var/log/supercomparateca-health.log {
+              weekly
+              rotate 4
+              compress
+              missingok
+              notifempty
+              copytruncate
+          }

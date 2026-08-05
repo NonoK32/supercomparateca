@@ -13,7 +13,15 @@ Aprovisionamiento del servidor (Hetzner) como código, con **Ansible**, de forma
 ## Playbooks
 
 - `provision.yml` — prepara un servidor recién creado (roles base + docker + firewall).
-- `deploy.yml` — clona el repo y levanta el stack de producción con Compose + Traefik.
+- `deploy.yml` — clona el repo, levanta el stack de producción con Compose + Traefik
+  e instala el mantenimiento programado (tarea 13.5):
+  - backup de la base de datos + `acme.json` a diario a las 03:00, con 7 días de
+    retención, en `{{ app_dir }}/backups` (modo 0700: contiene datos de usuarios
+    y la clave privada del certificado);
+  - `healthcheck.sh prod` cada 10 minutos a `/var/log/supercomparateca-health.log`;
+  - `logrotate` semanal para ambos logs.
+
+  Ambos cron corren como **root** porque `.env` es `root:root 600`.
 
 ## Uso
 
