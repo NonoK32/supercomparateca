@@ -21,7 +21,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
-    "ruff>=0.4",
+    # Version fijada a proposito: con un rango abierto, CI instala la ultima y
+    # cada vez que ruff amplia sus reglas por defecto se rompe el build sin que
+    # nadie haya tocado el codigo (paso con 0.16.1). Subirla debe ser un commit
+    # deliberado.
+    "ruff==0.16.1",
     "behave>=1.2.6",
 ]
 
@@ -36,6 +40,15 @@ include = ["app*"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint.flake8-bugbear]
+# B008 prohibe llamar funciones en los valores por defecto de los argumentos,
+# pero en FastAPI ese ES el mecanismo de inyeccion de dependencias: Depends(),
+# File() y Form() estan pensados para evaluarse ahi y no guardan estado entre
+# peticiones. Se declaran inmutables en vez de silenciar la regla con noqa en
+# los ~34 sitios donde aparece, para que B008 siga avisando de los casos que si
+# son un error (un list() o un dict() por defecto, por ejemplo).
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Form"]
 
 [tool.ruff.lint.per-file-ignores]
 # El secreto JWT debe fijarse en el entorno antes de importar la app.

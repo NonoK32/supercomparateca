@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
@@ -39,7 +39,12 @@ def subir(
     ticket = models.Ticket(
         usuario_id=usuario.id,
         supermercado_id=supermercado_id,
-        fecha_compra=fecha_compra or date.today(),
+        # Si el usuario no indica fecha, se toma la de hoy en UTC. Explicito
+        # porque date.today() depende de la zona del servidor: el contenedor va
+        # en UTC, asi que un ticket subido de madrugada en España puede quedar
+        # fechado el dia anterior. Que la fecha la ponga el cliente sigue siendo
+        # lo correcto; esto es solo el respaldo.
+        fecha_compra=fecha_compra or datetime.now(timezone.utc).date(),
         texto_ocr_bruto=texto,
         estado="pendiente",
     )

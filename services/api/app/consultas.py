@@ -103,7 +103,7 @@ def comparativa_cesta(db: Session, usuario_id: int, limite: int = 10) -> dict:
                 {
                     "supermercado_id": precio["supermercado_id"],
                     "supermercado": precio["supermercado"],
-                    "total": Decimal("0"),
+                    "total": Decimal(0),
                     "productos_cubiertos": 0,
                 },
             )
