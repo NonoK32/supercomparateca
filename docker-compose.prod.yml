@@ -58,6 +58,29 @@ services:
       - traefik.http.routers.api.middlewares=api-strip
       - traefik.http.middlewares.api-strip.stripprefix.prefixes=/api
       - traefik.http.services.api.loadbalancer.server.port=8000
+      # Router aparte para /api/auth, con limite de peticiones por IP: frena el
+      # alta masiva de cuentas y la fuerza bruta contra el login, que es la
+      # parte de la API accesible sin token. `priority` explicita para que gane
+      # al router general de /api (que si no, por longitud de regla, podria
+      # atender tambien estas rutas y saltarse el limite).
+      #
+      # El limite se aplica a la IP real del cliente porque el DNS apunta
+      # directo al servidor. Si algun dia se activa el proxy de Cloudflare
+      # (nube naranja), Traefik pasaria a ver las IPs de Cloudflare y habria
+      # que configurar forwardedHeaders.trustedIPs, o el limite se aplicaria
+      # por edge de CF en vez de por visitante.
+      #
+      # 10 por minuto con picos de 5: de sobra para una persona, muy corto para
+      # un bot. Subirlo si algun dia hay muchos usuarios tras una misma IP
+      # (redes moviles con CGNAT, oficinas).
+      - traefik.http.routers.auth.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/auth`)
+      - traefik.http.routers.auth.entrypoints=websecure
+      - traefik.http.routers.auth.tls.certresolver=le
+      - traefik.http.routers.auth.priority=100
+      - traefik.http.routers.auth.middlewares=api-strip,auth-ratelimit
+      - traefik.http.middlewares.auth-ratelimit.ratelimit.average=10
+      - traefik.http.middlewares.auth-ratelimit.ratelimit.period=1m
+      - traefik.http.middlewares.auth-ratelimit.ratelimit.burst=5
 
   frontend:
     ports: []

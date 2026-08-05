@@ -400,6 +400,65 @@ A partir de aquí el ciclo normal es solo el paso 5: `entrypoint.sh` aplica
 > en bucle y `docker compose logs api` muestra `DuplicateTable`. No se pierde
 > nada: para el stack, haz el `stamp` y vuelve a levantar.
 
+## Activar el filtro anti-bot del registro (Turnstile)
+
+Mientras `TURNSTILE_SECRET_KEY` esté vacía **el registro está abierto a
+cualquiera**, sin verificación. El código no falla si falta: se despliega y no
+protege. Para activarlo:
+
+1. En <https://dash.cloudflare.com> → **Turnstile** → *Add widget*. Añade el
+   dominio `supercomparateca.com`. No hace falta que el dominio esté
+   proxificado por Cloudflare (hoy no lo está: el DNS apunta directo al
+   servidor).
+2. Copia las dos claves al `.env` del servidor:
+
+   ```bash
+   sudo nano /opt/supercomparateca/.env
+   # TURNSTILE_SITE_KEY=0x4AAA...      (pública, la ve el navegador)
+   # TURNSTILE_SECRET_KEY=0x4AAA...    (secreta, no sale del servidor)
+   ```
+
+3. Redespliega para que el `api` recoja las variables:
+
+   ```bash
+   cd /opt/supercomparateca && sudo ./scripts/deploy.sh prod
+   ```
+
+4. Verifica que la clave de sitio se está sirviendo y que la API rechaza un
+   registro sin token:
+
+   ```bash
+   curl -s https://supercomparateca.com/api/auth/config
+   # -> {"turnstile_site_key":"0x4AAA..."}   (vacío = NO está activo)
+
+   curl -s -X POST https://supercomparateca.com/api/auth/registro \
+     -H 'Content-Type: application/json' \
+     -d '{"nombre":"bot","email":"bot@example.com","password":"password123"}'
+   # -> 400, "No se ha podido verificar que no eres un bot"
+   ```
+
+Para ensayar sin cuenta real, Cloudflare publica claves de prueba: sitio
+`1x00000000000000000000AA`, y secretas `1x0000000000000000000000000000000AA`
+(acepta siempre) o `2x0000000000000000000000000000000AA` (rechaza siempre).
+
+### Límite de peticiones
+
+Independiente de Turnstile y ya activo en cuanto se despliega: Traefik limita
+`/api/auth` a **10 peticiones por minuto y IP**, con picos de 5. Cubre tanto el
+alta masiva como la fuerza bruta contra el login. Se comprueba así:
+
+```bash
+for i in $(seq 1 20); do
+  curl -s -o /dev/null -w "%{http_code} " https://supercomparateca.com/api/auth/config
+done; echo
+# Las primeras responden 200 y a partir del limite aparecen 429.
+```
+
+Si algún día se activa el proxy de Cloudflare (nube naranja), **hay que revisar
+esto**: Traefik pasaría a ver las IPs de Cloudflare y el límite se aplicaría por
+edge en vez de por visitante. Haría falta `forwardedHeaders.trustedIPs` con los
+rangos de CF.
+
 ## Qué viene después
 
 1. **13.3 — ensayo con el staging de Let's Encrypt.** Diez minutos de trabajo

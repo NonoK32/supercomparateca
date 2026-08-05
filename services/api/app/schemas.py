@@ -10,6 +10,16 @@ class UsuarioCreate(BaseModel):
     email: EmailStr
     # bcrypt usa como máximo los primeros 72 bytes de la contraseña.
     password: str = Field(min_length=8, max_length=72)
+    # Token que genera el widget de Turnstile en el navegador. Opcional en el
+    # esquema porque la verificación se desactiva si no hay clave secreta
+    # configurada; cuando la hay, el router lo exige.
+    turnstile_token: str | None = None
+
+
+class AuthConfig(BaseModel):
+    """Configuración pública que el frontend necesita antes de registrarse."""
+
+    turnstile_site_key: str
 
 
 class UsuarioRead(BaseModel):

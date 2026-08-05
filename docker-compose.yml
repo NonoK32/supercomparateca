@@ -48,6 +48,10 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8090,http://127.0.0.1:8090}
       UMBRAL_AUTO: ${UMBRAL_AUTO:-0.92}
       UMBRAL_SUGERENCIA: ${UMBRAL_SUGERENCIA:-0.70}
+      # Anti-bot en el registro. Vacías en desarrollo: sin clave secreta no se
+      # verifica nada y el registro funciona sin widget.
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
     ports:
       - "8000:8000"
     depends_on:

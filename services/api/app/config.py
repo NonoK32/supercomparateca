@@ -31,6 +31,16 @@ class Settings(BaseSettings):
     # Orígenes permitidos para el frontend (CORS), separados por comas.
     cors_origins: str = "http://localhost:8080,http://127.0.0.1:8080"
 
+    # Turnstile (anti-bot de Cloudflare) en el registro. La clave de sitio es
+    # pública: el frontend la pide en GET /auth/config, así no hay que
+    # recompilar nada al cambiarla. La secreta NO sale del servidor.
+    #
+    # Si turnstile_secret_key está vacía la verificación se desactiva, para que
+    # el desarrollo y los tests no necesiten credenciales de Cloudflare. En
+    # producción hay que definirla: sin ella el registro queda abierto.
+    turnstile_site_key: str = ""
+    turnstile_secret_key: str = ""
+
     # Matching por similitud (§5bis punto 3). Por encima de `umbral_auto` se
     # asigna el producto sin preguntar; entre sugerencia y auto se propone al
     # usuario. Configurables porque hay que recalibrarlos con tickets reales

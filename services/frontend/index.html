@@ -29,6 +29,9 @@
           <input type="text" id="reg-nombre" placeholder="nombre" required>
           <input type="email" id="reg-email" placeholder="email" required>
           <input type="password" id="reg-password" placeholder="contraseña (mín. 8)" required minlength="8">
+          <!-- Widget anti-bot. Queda vacío si el servidor no tiene configurada
+               la clave de sitio (desarrollo): ver montarTurnstile() en app.js. -->
+          <div id="turnstile-registro"></div>
           <button type="submit">Registrarme</button>
         </form>
       </div>

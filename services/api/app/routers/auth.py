@@ -1,19 +1,49 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, seguridad
+from ..config import settings
 from ..database import get_db
+from ..turnstile import TurnstileClient, get_turnstile_client
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/config", response_model=schemas.AuthConfig)
+def config_publica():
+    """Datos públicos que el frontend necesita para pintar el formulario.
+
+    La clave de sitio de Turnstile se sirve desde aquí en vez de incrustarla en
+    el HTML: el frontend es estático y así cambiarla no obliga a reconstruir la
+    imagen. Si viene vacía, el frontend no monta el widget.
+    """
+    return schemas.AuthConfig(turnstile_site_key=settings.turnstile_site_key)
 
 
 @router.post(
     "/registro", response_model=schemas.UsuarioRead, status_code=status.HTTP_201_CREATED
 )
-def registro(payload: schemas.UsuarioCreate, db: Session = Depends(get_db)):
+def registro(
+    payload: schemas.UsuarioCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    turnstile: TurnstileClient = Depends(get_turnstile_client),
+):
+    # Filtro anti-bot antes de tocar la base de datos: si no hay clave secreta
+    # configurada no se verifica nada (desarrollo y tests).
+    if turnstile.activo:
+        ip = request.client.host if request.client else None
+        if not payload.turnstile_token or not turnstile.verificar(
+            payload.turnstile_token, ip
+        ):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "No se ha podido verificar que no eres un bot. Recarga e inténtalo de nuevo.",
+            )
+
     existe = db.scalar(
         select(models.Usuario).where(models.Usuario.email == payload.email)
     )

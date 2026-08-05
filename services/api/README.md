@@ -26,6 +26,12 @@ Se comunica con `ocr-service` por HTTP interno y con `db` (PostgreSQL) por SQL.
   propiedad del usuario del token; ver/borrar un ticket ajeno devuelve 404.
 
 Seguridad: contraseñas con bcrypt, JWT (HS256), secreto vía `JWT_SECRET_KEY`.
+Registro protegido con **Cloudflare Turnstile**: si `TURNSTILE_SECRET_KEY` está
+definida, `POST /auth/registro` exige un token válido del widget; si está vacía
+(desarrollo y tests) no se verifica nada. La clave de sitio, que es pública, se
+sirve en `GET /auth/config` para que el frontend estático no la lleve dentro.
+El límite de peticiones de `/auth` lo pone Traefik, no la app (ver
+`docker-compose.prod.yml`).
 Productos, supermercados y comparativa de precios son datos compartidos (globales).
 
 Variable `OCR_SERVICE_URL` para localizar al `ocr-service` (por defecto

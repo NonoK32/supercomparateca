@@ -88,8 +88,33 @@ $("form-login").addEventListener("submit", async (e) => {
   }
 });
 
+// ---- Anti-bot (Turnstile) ----
+// La clave de sitio la sirve la API en /auth/config, no va incrustada en el
+// HTML: el frontend es una imagen estática y así cambiarla no obliga a
+// reconstruirla. Si viene vacía (desarrollo), no se monta nada y el registro
+// funciona igual, porque el backend tampoco verifica.
+async function montarTurnstile() {
+  let cfg;
+  try {
+    cfg = await api("/auth/config");
+  } catch {
+    return; // Sin config no bloqueamos el formulario; el backend decide.
+  }
+  if (!cfg.turnstile_site_key) return;
+
+  const cont = $("turnstile-registro");
+  cont.className = "cf-turnstile";
+  cont.dataset.sitekey = cfg.turnstile_site_key;
+  const script = document.createElement("script");
+  script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+  script.async = true;
+  script.defer = true;
+  document.head.appendChild(script);
+}
+
 $("form-registro").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const cont = $("turnstile-registro");
   try {
     await api("/auth/registro", {
       method: "POST",
@@ -97,11 +122,19 @@ $("form-registro").addEventListener("submit", async (e) => {
         nombre: $("reg-nombre").value,
         email: $("reg-email").value,
         password: $("reg-password").value,
+        // Vacío si el widget no está montado; el backend solo lo exige cuando
+        // tiene clave secreta configurada.
+        turnstile_token: window.turnstile ? window.turnstile.getResponse(cont) : undefined,
       },
     });
     mensaje("Cuenta creada, ya puedes iniciar sesión");
+    $("form-registro").reset();
   } catch (err) {
     mensaje(err.message, true);
+  } finally {
+    // El token de Turnstile es de un solo uso: sin resetear, un segundo intento
+    // reenviaría el mismo y Cloudflare lo rechazaría.
+    if (window.turnstile) window.turnstile.reset(cont);
   }
 });
 
@@ -378,4 +411,5 @@ if (token) {
   mostrarApp();
 } else {
   mostrarAuth();
+  montarTurnstile();
 }
