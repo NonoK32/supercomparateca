@@ -14,6 +14,7 @@ services:
     # Traefik no descubria ninguna ruta y por tanto nunca pedia certificado.
     # No se arregla con DOCKER_API_VERSION porque v3.1 ignora esa variable.
     image: traefik:v3.7
+    restart: unless-stopped
     environment:
       # Redundante con v3.7 (ya negocia la version), pero deja el
       # comportamiento fijado y explicito.

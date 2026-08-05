@@ -4,10 +4,16 @@
 #
 # El reverse-proxy (HTTPS/Let's Encrypt) se añade en la EPIC 7 (despliegue),
 # donde ya hay dominio. El frontend llega en la EPIC 4bis.
+#
+# `restart: unless-stopped` en todos los servicios: sin esto el stack no vuelve
+# solo tras un reinicio del servidor y la web se queda caída hasta lanzar el
+# compose a mano. "unless-stopped" y no "always" para que un `docker compose
+# stop` deliberado siga siendo respetado tras el reboot.
 
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -22,6 +28,7 @@ services:
 
   ocr-service:
     build: ./services/ocr-service
+    restart: unless-stopped
     environment:
       OCR_LANG: ${OCR_LANG:-spa}
     healthcheck:
@@ -32,6 +39,7 @@ services:
 
   api:
     build: ./services/api
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       OCR_SERVICE_URL: http://ocr-service:8001
@@ -55,6 +63,7 @@ services:
 
   frontend:
     build: ./services/frontend
+    restart: unless-stopped
     ports:
       - "8090:8080"
     depends_on:
