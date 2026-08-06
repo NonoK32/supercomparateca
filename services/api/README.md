@@ -69,8 +69,15 @@ python3 -m venv .venv
 .venv/bin/behave                       # tests de aceptación (BDD, en features/)
 
 .venv/bin/alembic upgrade head            # crea/actualiza el esquema (la primera vez)
-.venv/bin/uvicorn app.main:app --reload   # servidor en http://127.0.0.1:8000
+
+# JWT_SECRET_KEY es obligatoria (mínimo 32 caracteres) o la app no arranca.
+JWT_SECRET_KEY=$(openssl rand -hex 32) .venv/bin/uvicorn app.main:app --reload
 ```
+
+Ejecutar los dos comandos **desde este directorio**: la URL de SQLite por
+defecto y el `env_file` de `config.py` son relativos al directorio de trabajo,
+así que lanzarlos desde sitios distintos deja a Alembic y a la app en bases de
+datos diferentes.
 
 Docs interactivas (Swagger UI) en `http://127.0.0.1:8000/docs`.
 
