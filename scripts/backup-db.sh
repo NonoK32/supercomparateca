@@ -25,15 +25,54 @@ if [ "${1:-}" = "prod" ]; then
 fi
 
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
-RETENTION_DAYS="${RETENTION_DAYS:-7}"
+# 30 dias, no 7: un volcado de esta base ocupa unos pocos KB y el disco son
+# 40 GB, asi que apretar la retencion no ahorra nada. Lo que si cuesta caro es
+# una corrupcion que se detecta tarde y ya no tiene copia sana detras.
+RETENTION_DAYS="${RETENTION_DAYS:-30}"
 mkdir -p "$BACKUP_DIR"
 
 stamp="$(date +%Y%m%d-%H%M%S)"
 destino="$BACKUP_DIR/supercomparateca-$stamp.sql.gz"
+# Se vuelca a un fichero temporal y solo se le pone el nombre bueno si el
+# volcado sale entero. Sin esto, un pg_dump que falla a medias deja un .sql.gz
+# de tamaño plausible que nadie mira, y la retencion acaba borrando los sanos.
+parcial="$destino.parcial"
 
 echo "Volcando la base de datos '$POSTGRES_DB'..."
-docker compose "${compose_files[@]}" exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > "$destino"
-echo "Backup creado: $destino"
+# --no-owner --no-acl: sin ellos, pg_dump mete "ALTER TABLE ... OWNER TO
+# supercomparateca" y "GRANT ..." en el volcado, y restaurar en un PostgreSQL
+# limpio falla con `role "supercomparateca" does not exist`. Es decir: el
+# backup solo servia en una maquina donde ese rol ya existiera, que es
+# justamente lo que NO se puede dar por hecho el dia que haya que reconstruir
+# el servidor desde cero. Asi el volcado se restaura en cualquier sitio y los
+# objetos quedan a nombre de quien haga la restauracion.
+if ! docker compose "${compose_files[@]}" exec -T db \
+    pg_dump --no-owner --no-acl -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > "$parcial"; then
+  rm -f "$parcial"
+  echo "FALLO: pg_dump no ha terminado. No se ha creado ningun backup."
+  exit 1
+fi
+
+# Que el fichero exista no significa que lleve datos dentro. Se cuentan las
+# filas de los bloques COPY del volcado: un dump con el esquema y cero filas
+# pesa casi lo mismo que uno con la base entera, asi que mirar el tamaño no
+# distingue nada. Esto corre de madrugada sin nadie delante.
+filas="$(gzip -dc "$parcial" | awk '
+  /^COPY .* FROM stdin;$/ { dentro = 1; next }
+  /^\\\.$/                { dentro = 0; next }
+  dentro                  { n++ }
+  END                     { print n + 0 }
+')"
+
+if [ "$filas" -eq 0 ]; then
+  rm -f "$parcial"
+  echo "FALLO: el volcado no contiene ninguna fila. No se guarda como backup."
+  echo "La base de datos esta vacia o pg_dump no ha visto los datos."
+  exit 1
+fi
+
+mv "$parcial" "$destino"
+echo "Backup creado: $destino ($filas filas)"
 
 # Certificados de Let's Encrypt (13.5). No son imprescindibles —Traefik los
 # vuelve a emitir— pero restaurarlos evita gastar cuota de la CA si hay que

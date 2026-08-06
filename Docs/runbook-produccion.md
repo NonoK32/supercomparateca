@@ -504,6 +504,47 @@ Las que se compilaron en el servidor quedan ocupando disco. Se liberan con:
 sudo docker image prune -a --filter "until=24h"
 ```
 
+## Backups: comprobar que sirven
+
+Un backup que nunca se ha restaurado no es un backup, es un fichero. Los tres
+scripts cubren las tres cosas que pueden fallar:
+
+```bash
+# En el servidor: crea el volcado. Se niega a guardarlo si sale sin filas.
+sudo ./scripts/backup-db.sh prod
+
+# En el servidor o en local: lo restaura en un PostgreSQL desechable y cuenta
+# las filas. No toca la base real en ningún momento.
+sudo ./scripts/verificar-backup.sh                    # el más reciente
+sudo ./scripts/verificar-backup.sh backups/xxx.sql.gz # uno concreto
+
+# EN LOCAL: se trae las copias fuera del servidor.
+./scripts/traer-backups.sh
+```
+
+**Por qué hace falta cada uno:**
+
+- **El volcado puede salir vacío.** Un dump con el esquema y cero filas pesa
+  casi lo mismo que uno con la base entera, así que mirar el tamaño no
+  distingue nada. `backup-db.sh` cuenta las filas de los bloques `COPY` y
+  **se niega a dejar el fichero** si no hay ninguna. Antes escribía el
+  `.sql.gz` pasara lo que pasara, de madrugada y sin nadie mirando.
+- **El volcado puede no restaurar.** Hasta el 2026-08-06 `pg_dump` se lanzaba
+  sin `--no-owner`, así que los dumps llevaban dentro
+  `ALTER TABLE ... OWNER TO supercomparateca` y **fallaban en un PostgreSQL
+  limpio** con `role does not exist` — justo el escenario de reconstruir el
+  servidor desde cero. Los nuevos son portables; `verificar-backup.sh` sabe
+  restaurar también los antiguos, creando los roles que el volcado menciona.
+- **Las copias viven en el mismo disco que la base.** Si se pierde la máquina
+  se pierden las dos cosas a la vez, y este servidor ya entró en modo rescate
+  una vez sin que se sepa por qué. `traer-backups.sh` se las trae a tu portátil.
+  Hasta que eso esté automatizado (Storage Box de Hetzner, rclone…), **hay que
+  acordarse de ejecutarlo**.
+
+La retención pasó de 7 a **30 días**: un volcado ocupa unos KB y el disco son
+40 GB, así que apretarla no ahorraba nada y dejaba sin copia sana cualquier
+corrupción detectada con más de una semana de retraso.
+
 ## ⚠️ Despliegue de la migración `01233e7e156c` (una sola vez)
 
 Esa migración **elimina la columna `tickets.texto_ocr_bruto` y su contenido no
