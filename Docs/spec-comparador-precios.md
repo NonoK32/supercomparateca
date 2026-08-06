@@ -67,7 +67,7 @@ Migrar el despliegue de Docker Compose a un cluster k3s en Hetzner, para aprende
 
 - **Usuario**: id, nombre, email, password_hash, fecha_registro
 - **Supermercado**: id, nombre (Mercadona, Lidl, Dia, Aldi)
-- **Ticket**: id, usuario_id, supermercado_id, fecha_compra, texto_ocr_bruto, estado (pendiente/procesado) — *(no se guarda la imagen original, solo el texto extraído por OCR, por privacidad y para reducir almacenamiento; la imagen se descarta tras procesarla)*
+- **Ticket**: id, usuario_id *(nullable)*, supermercado_id, fecha_compra, estado (pendiente/procesado) — *(no se guarda ni la imagen ni el texto OCR. **Corregido el 2026-08-06**: la versión anterior guardaba `texto_ocr_bruto` y decía que descartar la imagen bastaba «por privacidad», pero el texto conservaba lo mismo en otro formato — los 4 últimos dígitos de la tarjeta, el número de fidelización, la hora exacta y la caja. Ahora el texto solo vive en memoria mientras se parsea y únicamente sobreviven las `LineaTicket`. `usuario_id` es nullable porque al ejercer el derecho de supresión los tickets se desvinculan en vez de borrarse: los precios son un bien compartido)*
 - **LineaTicket**: id, ticket_id, texto_original, cantidad, precio_unitario, precio_total, producto_id (nullable hasta que se asocie)
 - **Producto**: id, nombre_normalizado, categoria, unidad_medida
 - **AliasProducto**: id, producto_id, texto_alias, supermercado_id — *(guarda las distintas formas en que un mismo producto aparece escrito en cada ticket, para ir "enseñando" al sistema — clave para la Fase 2)*

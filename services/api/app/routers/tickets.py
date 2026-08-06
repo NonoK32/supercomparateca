@@ -34,7 +34,11 @@ def subir(
         imagen.filename or "ticket",
         imagen.content_type or "application/octet-stream",
     )
-    # La imagen ya no se necesita: solo persiste el texto extraído.
+    # Ni la imagen ni el texto completo se persisten. El texto solo vive en
+    # memoria el tiempo de parsearlo: un ticket real lleva los 4 últimos
+    # dígitos de la tarjeta, el número de fidelización, la hora exacta y la
+    # caja, y nada de eso hace falta para comparar precios (minimización,
+    # art. 5.1.c RGPD). De aquí solo sobreviven las líneas parseadas.
 
     ticket = models.Ticket(
         usuario_id=usuario.id,
@@ -45,7 +49,6 @@ def subir(
         # fechado el dia anterior. Que la fecha la ponga el cliente sigue siendo
         # lo correcto; esto es solo el respaldo.
         fecha_compra=fecha_compra or datetime.now(timezone.utc).date(),
-        texto_ocr_bruto=texto,
         estado="pendiente",
     )
     for linea in parsing.parsear_lineas(texto):

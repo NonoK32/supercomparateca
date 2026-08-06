@@ -504,6 +504,25 @@ Las que se compilaron en el servidor quedan ocupando disco. Se liberan con:
 sudo docker image prune -a --filter "until=24h"
 ```
 
+## ⚠️ Despliegue de la migración `01233e7e156c` (una sola vez)
+
+Esa migración **elimina la columna `tickets.texto_ocr_bruto` y su contenido no
+se puede recuperar**. Es intencionado: guardaba el texto íntegro del ticket, que
+incluye los 4 últimos dígitos de la tarjeta, el número de fidelización, la hora
+exacta y la caja. Pero conviene tener un backup fresco por si acaso.
+
+**Antes de desplegar**, a mano:
+
+```bash
+cd /opt/supercomparateca && sudo ./scripts/backup-db.sh prod
+```
+
+Después ya se despliega normal. `entrypoint.sh` aplica `alembic upgrade head`
+al arrancar el `api`, así que la migración corre sola.
+
+Si alguna vez hiciera falta ese texto, la única copia queda en el `.sql.gz`
+anterior a este despliegue. Guárdalo aparte si te importa.
+
 ## Comprobar que lo desplegado funciona (smoke test)
 
 `healthcheck.sh` contesta *"está vivo"*. `smoke.sh` contesta *"hace lo que tiene

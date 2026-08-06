@@ -68,7 +68,10 @@ def test_listar_y_obtener(client, fake_ocr):
     assert len(client.get("/tickets").json()) == 1
     resp = client.get(f"/tickets/{creado['id']}")
     assert resp.status_code == 200
-    assert resp.json()["texto_ocr_bruto"] == "LECHE 0,89"
+    # El texto OCR completo NO se persiste (minimización): del ticket solo
+    # sobrevive lo parseado. Ver la migración 01233e7e156c.
+    assert "texto_ocr_bruto" not in resp.json()
+    assert [linea["texto_original"] for linea in resp.json()["lineas"]] == ["LECHE"]
 
 
 def test_eliminar(client, fake_ocr):

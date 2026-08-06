@@ -127,6 +127,28 @@
         <div id="resultado-cesta"></div>
       </div>
 
+      <!-- Zona de baja. Va en un pie, fuera de las pestañas, para que el
+           derecho de supresión sea alcanzable desde cualquier pantalla sin
+           competir visualmente con el trabajo del día a día. -->
+      <footer class="pie-cuenta">
+        <button id="btn-baja" class="ghost" type="button">Borrar mi cuenta</button>
+
+        <div id="baja-confirmar" class="hidden">
+          <p class="muted">
+            Se borra tu cuenta y tus alias. Tus tickets se desvinculan de ti y
+            sus precios siguen contando para la comparativa de todos, ya sin
+            dueño. <strong>No se puede deshacer.</strong>
+          </p>
+          <form id="form-baja">
+            <input type="password" id="baja-password" placeholder="confirma tu contraseña" required>
+            <div class="fila">
+              <button type="submit">Borrar definitivamente</button>
+              <button type="button" id="btn-baja-cancelar" class="sec">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      </footer>
+
     </section>
   </main>
 

@@ -22,6 +22,16 @@ class AuthConfig(BaseModel):
     turnstile_site_key: str
 
 
+class BorrarCuenta(BaseModel):
+    """Confirmación para el borrado de cuenta (art. 17 RGPD).
+
+    Se pide la contraseña porque la acción es irreversible: un token robado no
+    debería bastar para destruir la cuenta de alguien.
+    """
+
+    password: str
+
+
 class UsuarioRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -95,11 +105,10 @@ class TicketRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    usuario_id: int
+    usuario_id: int | None
     supermercado_id: int
     fecha_compra: date
     estado: str
-    texto_ocr_bruto: str
     lineas: list[LineaTicketRead]
 
 

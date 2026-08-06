@@ -634,6 +634,30 @@ body.sin-sesion main { padding-bottom: var(--sp-6); }
   min-height: 38px;
 }
 
+/* -- Zona de baja --
+   Al pie y en voz baja: tiene que ser alcanzable siempre (es un derecho, no
+   un ajuste escondido) pero sin competir con el trabajo del dia a dia. */
+.pie-cuenta {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px dashed var(--tinta-tenue);
+  text-align: center;
+}
+.pie-cuenta .muted { text-align: left; }
+#baja-confirmar {
+  max-width: 30rem;
+  margin: 0 auto;
+  text-align: left;
+}
+/* Al confirmar, el boton primario pasa a ser destructivo: es la unica accion
+   de la app que borra datos del propio usuario sin vuelta atras. */
+#form-baja button[type="submit"] {
+  background: var(--rojo);
+  border-color: var(--rojo);
+  color: #fff;
+}
+#form-baja button[type="submit"]:hover { opacity: .88; }
+
 /* Un impreso en blanco no explica que hacer. */
 .vacio {
   text-align: center;

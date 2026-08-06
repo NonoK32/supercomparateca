@@ -35,9 +35,21 @@ async function api(path, { method = "GET", json, form } = {}) {
   if (resp.status === 204) return null;
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    throw new Error(data.detail ? JSON.stringify(data.detail) : `Error ${resp.status}`);
+    throw new Error(textoError(data.detail, resp.status));
   }
   return data;
+}
+
+// El `detail` de FastAPI es una cadena en los errores propios, pero una lista
+// de {loc, msg} en los de validación de Pydantic. Sin distinguirlos, el usuario
+// veía el JSON en crudo, comillas incluidas.
+function textoError(detail, status) {
+  if (!detail) return `Error ${status}`;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d) => d.msg || JSON.stringify(d)).join(". ");
+  }
+  return JSON.stringify(detail);
 }
 
 // ---- Autenticación ----
@@ -658,6 +670,46 @@ function mostrarCesta(data) {
     }
   }
 }
+
+// ---- Baja de la cuenta (derecho de supresión, art. 17 RGPD) ----
+// La confirmación es un formulario, no un confirm(): hace falta la contraseña,
+// porque la acción es irreversible y un token robado no debería bastar.
+$("btn-baja").addEventListener("click", () => {
+  $("baja-confirmar").classList.remove("hidden");
+  $("btn-baja").classList.add("hidden");
+  $("baja-password").focus();
+});
+
+$("btn-baja-cancelar").addEventListener("click", () => {
+  $("baja-confirmar").classList.add("hidden");
+  $("btn-baja").classList.remove("hidden");
+  $("baja-password").value = "";
+});
+
+$("form-baja").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector("button[type=submit]");
+  btn.disabled = true;
+  try {
+    await api("/auth/me", {
+      method: "DELETE",
+      json: { password: $("baja-password").value },
+    });
+    // No se usa cerrarSesion(): ese camino vuelve al login como si la sesión
+    // hubiera caducado, y aquí conviene decir que la cuenta ya no existe.
+    token = null;
+    localStorage.removeItem("token");
+    mostrarAuth();
+    $("baja-confirmar").classList.add("hidden");
+    $("btn-baja").classList.remove("hidden");
+    mensaje("Cuenta borrada");
+  } catch (err) {
+    mensaje(err.message, true);
+  } finally {
+    btn.disabled = false;
+    $("baja-password").value = "";
+  }
+});
 
 // ---- Arranque ----
 if (token) {

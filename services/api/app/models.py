@@ -7,7 +7,6 @@ from sqlalchemy import (
     ForeignKey,
     Numeric,
     String,
-    Text,
     UniqueConstraint,
     func,
 )
@@ -51,11 +50,19 @@ class Ticket(Base):
     __tablename__ = "tickets"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    # Nullable a propósito: al borrar su cuenta, un usuario deja los tickets
+    # huérfanos en vez de eliminarlos. Los precios son un bien compartido y
+    # borrarlos degradaría la comparativa de todos; sin dueño ya no son datos
+    # personales, y `_ticket_propio` deja de dar acceso a nadie.
+    usuario_id: Mapped[int | None] = mapped_column(
+        ForeignKey("usuarios.id"), default=None
+    )
     supermercado_id: Mapped[int] = mapped_column(ForeignKey("supermercados.id"))
     fecha_compra: Mapped[date] = mapped_column(Date)
-    # Solo se guarda el texto extraído; la imagen se descarta tras el OCR.
-    texto_ocr_bruto: Mapped[str] = mapped_column(Text)
+    # NO se guarda el texto OCR completo. La imagen se descarta tras el OCR y
+    # el texto tampoco se persiste: un ticket real lleva los 4 últimos dígitos
+    # de la tarjeta, el número de fidelización, la hora exacta y la caja. Solo
+    # sobreviven las líneas parseadas (LineaTicket), que es lo que la app usa.
     estado: Mapped[str] = mapped_column(String(20), default="pendiente")
 
     lineas: Mapped[list["LineaTicket"]] = relationship(
