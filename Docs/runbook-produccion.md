@@ -497,8 +497,26 @@ durante un minuto: interesa tras un despliegue, molesta en un cron.
    antes del primer despliegue real.
 2. **Regístrate tú el primero** en cuanto la app esté en pie: el primer usuario
    que se registra es administrador (ver README).
-3. **13.4 — registry + CD:** hoy las imágenes se compilan en el servidor, que es
-   lento y obliga a tener 4 GB de RAM.
+3. **13.4 — registry + CD (a medias).** El CI ya publica las tres imágenes en
+   GHCR al integrar en `main`:
+
+   ```
+   ghcr.io/nonok32/supercomparateca-{api,ocr-service,frontend}:main
+   ghcr.io/nonok32/supercomparateca-{api,ocr-service,frontend}:<sha>
+   ```
+
+   **Todavía nadie las consume:** producción las sigue compilando en el
+   servidor. Cambiar eso es un paso pequeño y aparte — sustituir `build:` por
+   `image:` en `docker-compose.prod.yml` y que `deploy.sh` haga `pull` en vez
+   de `--build`. Es lo que quitaría la compilación local y la necesidad de 4 GB
+   de RAM. Se ha dejado sin hacer a propósito mientras la EPIC 12 (k3s) siga en
+   pie, porque ese trozo es el que se reescribiría.
+
+   > La primera vez hay que **hacer públicos los tres paquetes** en
+   > GitHub → Packages → *Package settings* → *Change visibility*. Nacen
+   > privados aunque el repo sea público, y el servidor no podría descargarlos
+   > sin credenciales.
+
 4. **13.6 — secretos:** el `.env` se sigue copiando a mano.
 
 ## Si algo va mal

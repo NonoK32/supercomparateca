@@ -66,6 +66,11 @@ jobs:
     name: Build imagen (${{ matrix.service }})
     needs: lint-test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Necesario para publicar en GHCR con el GITHUB_TOKEN: no hace falta
+      # crear ni guardar ningun secreto propio.
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -73,11 +78,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Build (sin push; el registry/deploy llegan con la EPIC 7)
+
+      # GHCR exige el nombre del propietario en minusculas y el de GitHub no
+      # tiene por que serlo (aqui es "NonoK32").
+      - name: Propietario en minusculas
+        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      # Solo al integrar en main: en un pull request la imagen se construye
+      # igual (valida el Dockerfile) pero no se publica.
+      - name: Entrar en GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build y push
         uses: docker/build-push-action@v6
         with:
           context: services/${{ matrix.service }}
-          push: false
-          tags: supercomparateca-${{ matrix.service }}:ci
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # Dos etiquetas con papeles distintos: `main` se mueve y sirve para
+          # "dame lo ultimo"; la del commit es inmutable y es a la que hay que
+          # anclar un despliegue si se quiere poder volver atras.
+          tags: |
+            ghcr.io/${{ env.OWNER }}/supercomparateca-${{ matrix.service }}:main
+            ghcr.io/${{ env.OWNER }}/supercomparateca-${{ matrix.service }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
