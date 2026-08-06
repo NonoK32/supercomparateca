@@ -4,6 +4,17 @@
 # Requiere en .env: DOMAIN (dominio real apuntando al servidor) y ACME_EMAIL.
 # Uso: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
+# IMÁGENES: producción NO compila. Los tres servicios propios apuntan a las
+# imágenes que el CI publica en GHCR al integrar en main. El compose base sigue
+# teniendo `build:` para el desarrollo local, así que aquí solo se añade
+# `image:` y el despliegue usa `pull` + `up --no-build` (ver scripts/deploy.sh):
+# ese `--no-build` es lo que hace que, si falta la imagen, falle en vez de
+# ponerse a compilar en un servidor de 4 GB.
+#
+# IMAGE_TAG por defecto es `main`, la etiqueta móvil. Para volver a una versión
+# anterior, poner en .env el SHA del commit y redesplegar:
+#   IMAGE_TAG=25c7eb537a7ebe8014eb80ba9f112ce3c74a25cd
+#
 # Rutas: https://DOMAIN/        -> frontend
 #        https://DOMAIN/api/... -> api (Traefik quita el prefijo /api)
 
@@ -45,7 +56,12 @@ services:
       - api
       - frontend
 
+  ocr-service:
+    # Imagen ya construida por el CI, no se compila aquí (ver nota arriba).
+    image: ghcr.io/nonok32/supercomparateca-ocr-service:${IMAGE_TAG:-main}
+
   api:
+    image: ghcr.io/nonok32/supercomparateca-api:${IMAGE_TAG:-main}
     # No exponer al host: el tráfico entra por Traefik.
     ports: []
     environment:
@@ -83,6 +99,7 @@ services:
       - traefik.http.middlewares.auth-ratelimit.ratelimit.burst=5
 
   frontend:
+    image: ghcr.io/nonok32/supercomparateca-frontend:${IMAGE_TAG:-main}
     ports: []
     labels:
       - traefik.enable=true

@@ -16,8 +16,18 @@ fi
 echo "Actualizando el código..."
 git pull --ff-only
 
-echo "Reconstruyendo y levantando los contenedores..."
-docker compose "${compose_files[@]}" up -d --build
+if [ "${1:-}" = "prod" ]; then
+  # Produccion no compila: descarga las imagenes que el CI publico en GHCR.
+  # --no-build hace que, si falta alguna, esto falle en vez de ponerse a
+  # compilar en un servidor de 4 GB (que es de donde veniamos).
+  echo "Descargando imagenes..."
+  docker compose "${compose_files[@]}" pull
+  echo "Levantando los contenedores..."
+  docker compose "${compose_files[@]}" up -d --no-build
+else
+  echo "Reconstruyendo y levantando los contenedores..."
+  docker compose "${compose_files[@]}" up -d --build
+fi
 
 docker compose "${compose_files[@]}" ps
 

@@ -350,9 +350,11 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
   **disco solo puede crecer**. Un CPX21 (80 GB) no puede pasar a CX22 (40 GB), ni
   siquiera vía snapshot. La forma de "bajar" es **recrear** el servidor y volver
   a lanzar `provision.yml` + `deploy.yml`: para eso la infraestructura es código.
-- El requisito de **4 GB de RAM es temporal**: viene de compilar las imágenes en
-  el servidor. Tras la tarea 13.4 (registry + CI) el servidor solo se las
-  descarga, y una máquina de 2 GB basta.
+- El requisito de **4 GB de RAM ya no aplica**: venía de compilar las imágenes
+  en el servidor, y desde la tarea 13.4 solo se descargan de GHCR. Una máquina
+  de 2 GB debería bastar, pero **no está comprobado en caliente**: antes de
+  bajar de plan, mira el consumo real con `docker stats` durante un OCR, que es
+  el pico. Y recuerda que el disco solo puede crecer (ver arriba).
 
 ## Adoptar Alembic en una base de datos que ya existe
 
@@ -459,6 +461,49 @@ esto**: Traefik pasaría a ver las IPs de Cloudflare y el límite se aplicaría 
 edge en vez de por visitante. Haría falta `forwardedHeaders.trustedIPs` con los
 rangos de CF.
 
+## De dónde salen las imágenes (13.4)
+
+**Producción no compila.** El CI publica las tres imágenes en GHCR al integrar
+en `main`, y `deploy.sh prod` hace `pull` + `up -d --no-build`. Ese `--no-build`
+es deliberado: si falta una imagen, el despliegue falla en vez de ponerse a
+compilar en un servidor de 4 GB.
+
+```
+ghcr.io/nonok32/supercomparateca-{api,ocr-service,frontend}:main
+ghcr.io/nonok32/supercomparateca-{api,ocr-service,frontend}:<sha>
+```
+
+> **Solo la primera vez:** hay que **hacer públicos los tres paquetes** en
+> GitHub → Packages → *Package settings* → *Change visibility*. Nacen privados
+> aunque el repo sea público, y sin eso el `pull` del servidor dará
+> `denied`/`not found`.
+
+### Volver a una versión anterior
+
+`IMAGE_TAG` en el `.env` decide qué se despliega. Por defecto es `main` (lo
+último integrado). Para retroceder, pon el **SHA completo** del commit y
+redespliega:
+
+```bash
+sudo nano /opt/supercomparateca/.env    # IMAGE_TAG=<sha completo>
+cd /opt/supercomparateca && sudo ./scripts/deploy.sh prod
+```
+
+El SHA sale de `git log --format=%H -5` o de la pestaña Actions. Para volver a
+lo último, `IMAGE_TAG=main`.
+
+> Ojo: esto **no revierte las migraciones de base de datos**. Si el commit al
+> que vuelves es anterior a una migración ya aplicada, el esquema seguirá
+> adelantado. Para cambios de esquema destructivos, restaurar el backup.
+
+### Tras el primer despliegue con imágenes
+
+Las que se compilaron en el servidor quedan ocupando disco. Se liberan con:
+
+```bash
+sudo docker image prune -a --filter "until=24h"
+```
+
 ## Comprobar que lo desplegado funciona (smoke test)
 
 `healthcheck.sh` contesta *"está vivo"*. `smoke.sh` contesta *"hace lo que tiene
@@ -497,27 +542,10 @@ durante un minuto: interesa tras un despliegue, molesta en un cron.
    antes del primer despliegue real.
 2. **Regístrate tú el primero** en cuanto la app esté en pie: el primer usuario
    que se registra es administrador (ver README).
-3. **13.4 — registry + CD (a medias).** El CI ya publica las tres imágenes en
-   GHCR al integrar en `main`:
-
-   ```
-   ghcr.io/nonok32/supercomparateca-{api,ocr-service,frontend}:main
-   ghcr.io/nonok32/supercomparateca-{api,ocr-service,frontend}:<sha>
-   ```
-
-   **Todavía nadie las consume:** producción las sigue compilando en el
-   servidor. Cambiar eso es un paso pequeño y aparte — sustituir `build:` por
-   `image:` en `docker-compose.prod.yml` y que `deploy.sh` haga `pull` en vez
-   de `--build`. Es lo que quitaría la compilación local y la necesidad de 4 GB
-   de RAM. Se ha dejado sin hacer a propósito mientras la EPIC 12 (k3s) siga en
-   pie, porque ese trozo es el que se reescribiría.
-
-   > La primera vez hay que **hacer públicos los tres paquetes** en
-   > GitHub → Packages → *Package settings* → *Change visibility*. Nacen
-   > privados aunque el repo sea público, y el servidor no podría descargarlos
-   > sin credenciales.
-
-4. **13.6 — secretos:** el `.env` se sigue copiando a mano.
+3. **13.6 — secretos:** el `.env` se sigue copiando a mano.
+4. **CD automático:** hoy el despliegue lo lanzas tú por SSH. En pausa
+   deliberada mientras la EPIC 12 (k3s) siga en pie, porque es la parte que se
+   reescribiría.
 
 ## Si algo va mal
 
