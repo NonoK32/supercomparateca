@@ -58,6 +58,11 @@ function mostrarAuth() {
   $("vista-app").classList.add("hidden");
   $("vista-auth").classList.remove("hidden");
   $("btn-logout").classList.add("hidden");
+  // Aquí y no en el arranque: a esta vista se llega también al cerrar sesión y
+  // al caducar el token (api() responde al 401 con cerrarSesion()). Si el
+  // widget se montara solo al arrancar, quien entrase con sesión y la perdiera
+  // se quedaría con un registro que siempre da 400.
+  montarTurnstile();
 }
 
 function cerrarSesion() {
@@ -93,12 +98,24 @@ $("form-login").addEventListener("submit", async (e) => {
 // HTML: el frontend es una imagen estática y así cambiarla no obliga a
 // reconstruirla. Si viene vacía (desarrollo), no se monta nada y el registro
 // funciona igual, porque el backend tampoco verifica.
+let turnstileMontado = false;
+
 async function montarTurnstile() {
+  // Un solo montaje por carga de página: mostrarAuth() puede llamarse varias
+  // veces y el widget ya montado sobrevive, porque cambiar de vista solo
+  // alterna clases y no toca el DOM del formulario.
+  if (turnstileMontado) return;
+  turnstileMontado = true;
+
   let cfg;
   try {
     cfg = await api("/auth/config");
   } catch {
-    return; // Sin config no bloqueamos el formulario; el backend decide.
+    // Sin config no bloqueamos el formulario; el backend decide. Se libera la
+    // guarda para que un fallo puntual de red no deje el widget sin montar
+    // durante el resto de la sesión.
+    turnstileMontado = false;
+    return;
   }
   if (!cfg.turnstile_site_key) return;
 
@@ -411,5 +428,4 @@ if (token) {
   mostrarApp();
 } else {
   mostrarAuth();
-  montarTurnstile();
 }
