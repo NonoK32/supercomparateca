@@ -45,9 +45,12 @@ async function mostrarApp() {
   $("vista-auth").classList.add("hidden");
   $("vista-app").classList.remove("hidden");
   $("btn-logout").classList.remove("hidden");
+  $("tabs").classList.remove("hidden");
+  document.body.classList.remove("sin-sesion");
   try {
     await cargarSupermercados();
     await cargarProductos();
+    await cargarTickets();
   } catch (err) {
     // Un 401 aquí ya habrá llamado a cerrarSesion() desde api().
     mensaje(err.message, true);
@@ -58,6 +61,10 @@ function mostrarAuth() {
   $("vista-app").classList.add("hidden");
   $("vista-auth").classList.remove("hidden");
   $("btn-logout").classList.add("hidden");
+  $("tabs").classList.add("hidden");
+  // Sin pestañas no hay barra fija al pie, así que <main> no debe reservar su
+  // hueco (styles.css, body.sin-sesion).
+  document.body.classList.add("sin-sesion");
   // Aquí y no en el arranque: a esta vista se llega también al cerrar sesión y
   // al caducar el token (api() responde al 401 con cerrarSesion()). Si el
   // widget se montara solo al arrancar, quien entrase con sesión y la perdiera
@@ -157,12 +164,36 @@ $("form-registro").addEventListener("submit", async (e) => {
 
 $("btn-logout").addEventListener("click", cerrarSesion);
 
+// ---- Pestañas ----
+// Cada botón declara el panel que muestra en data-panel. En móvil la barra va
+// fija al pie y en escritorio bajo la cabecera; eso es solo CSS.
+function activarPestana(idPanel) {
+  for (const tab of document.querySelectorAll(".tab")) {
+    const activa = tab.dataset.panel === idPanel;
+    tab.setAttribute("aria-selected", String(activa));
+    $(tab.dataset.panel).classList.toggle("hidden", !activa);
+  }
+  // Al cambiar de pestaña se vuelve arriba: si no, se hereda el scroll de la
+  // pantalla anterior y la nueva aparece empezada por la mitad.
+  window.scrollTo(0, 0);
+}
+
+for (const tab of document.querySelectorAll(".tab")) {
+  tab.addEventListener("click", () => activarPestana(tab.dataset.panel));
+}
+
 // ---- Supermercados ----
+// Nombre por id, para poder etiquetar los tickets del listado sin pedir el
+// supermercado uno por uno (la API solo devuelve supermercado_id).
+const nombreSupermercado = new Map();
+
 async function cargarSupermercados() {
   const sms = await api("/supermercados");
   const sel = $("sel-supermercado");
   sel.innerHTML = "";
+  nombreSupermercado.clear();
   for (const sm of sms) {
+    nombreSupermercado.set(sm.id, sm.nombre);
     const opt = document.createElement("option");
     opt.value = sm.id;
     opt.textContent = sm.nombre;
@@ -192,17 +223,129 @@ $("form-ticket").addEventListener("submit", async (e) => {
   form.append("supermercado_id", $("sel-supermercado").value);
   form.append("imagen", archivo);
   if ($("ticket-fecha").value) form.append("fecha_compra", $("ticket-fecha").value);
+
+  // El OCR es con diferencia lo más lento de la app (segundos). Sin bloquear el
+  // botón se reenvía el mismo ticket dos veces creyendo que no ha hecho nada.
+  const btn = e.target.querySelector("button[type=submit]");
+  const textoBtn = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Procesando…";
   try {
     const ticket = await api("/tickets", { method: "POST", form });
+    e.target.reset();
+    await cargarTickets();
+    activarPestana("panel-tickets");
     mostrarTicket(ticket);
     mensaje(`Ticket procesado: ${ticket.lineas.length} línea(s)`);
   } catch (err) {
     mensaje(err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoBtn;
   }
 });
 
+// Listado de tickets propios. Sin esto, un ticket a medio asociar quedaba
+// inalcanzable en cuanto se recargaba la página. GET /tickets ya devuelve las
+// líneas dentro, así que abrir uno no necesita otra petición.
+async function cargarTickets() {
+  let tickets;
+  try {
+    tickets = await api("/tickets");
+  } catch (err) {
+    mensaje(err.message, true);
+    return;
+  }
+  const cont = $("lista-tickets");
+  cont.textContent = "";
+
+  if (!tickets.length) {
+    const p = document.createElement("p");
+    p.className = "vacio";
+    p.textContent = "Todavía no has subido ningún ticket.";
+    cont.appendChild(p);
+    return;
+  }
+
+  // Más recientes primero: lo que se acaba de subir es lo que se va a asociar.
+  tickets.sort((a, b) => b.fecha_compra.localeCompare(a.fecha_compra) || b.id - a.id);
+  for (const t of tickets) cont.appendChild(filaTicket(t));
+}
+
+function filaTicket(ticket) {
+  const fila = document.createElement("div");
+  fila.className = "ticket-item";
+  fila.dataset.ticketId = ticket.id;
+
+  const info = document.createElement("button");
+  info.type = "button";
+  info.className = "info ticket-abrir";
+  const titulo = document.createElement("span");
+  titulo.className = "titulo";
+  titulo.textContent =
+    nombreSupermercado.get(ticket.supermercado_id) || "Supermercado";
+  const sub = document.createElement("span");
+  sub.className = "sub";
+  const pendientes = ticket.lineas.filter((l) => !l.producto_id).length;
+  sub.textContent =
+    `${ticket.fecha_compra} · ${ticket.lineas.length} línea(s)` +
+    (pendientes ? ` · ${pendientes} sin asociar` : "");
+  info.append(titulo, sub);
+  info.addEventListener("click", () => mostrarTicket(ticket));
+
+  const acciones = document.createElement("div");
+  acciones.className = "acciones";
+  const borrar = document.createElement("button");
+  borrar.type = "button";
+  borrar.className = "ghost";
+  borrar.textContent = "Borrar";
+  borrar.setAttribute("aria-label", `Borrar el ticket del ${ticket.fecha_compra}`);
+  borrar.addEventListener("click", async () => {
+    // Se lleva por delante las líneas y su histórico de precios: se confirma.
+    if (!confirm(`¿Borrar el ticket del ${ticket.fecha_compra}? No se puede deshacer.`)) {
+      return;
+    }
+    try {
+      await api(`/tickets/${ticket.id}`, { method: "DELETE" });
+      // Si el que se borra es el que está abierto, se cierra el detalle.
+      if (ticketAbierto === ticket.id) cerrarDetalleTicket();
+      await cargarTickets();
+      mensaje("Ticket borrado");
+    } catch (err) {
+      mensaje(err.message, true);
+    }
+  });
+  acciones.appendChild(borrar);
+
+  fila.append(info, acciones);
+  return fila;
+}
+
+// Qué ticket se está viendo en el detalle, para marcarlo en la lista y saber si
+// hay que cerrarlo al borrarlo.
+let ticketAbierto = null;
+
+function cerrarDetalleTicket() {
+  ticketAbierto = null;
+  $("card-ticket").classList.add("hidden");
+}
+
 function mostrarTicket(ticket) {
-  $("card-ticket").classList.remove("hidden");
+  ticketAbierto = ticket.id;
+  for (const fila of document.querySelectorAll(".ticket-item")) {
+    fila.setAttribute(
+      "aria-current",
+      String(Number(fila.dataset.ticketId) === ticket.id),
+    );
+  }
+  const card = $("card-ticket");
+  card.classList.remove("hidden");
+  // Reiniciar la animación: sin quitar la clase y forzar un reflujo, abrir un
+  // segundo ticket no volvería a "imprimirlo".
+  card.classList.remove("imprimiendo");
+  void card.offsetWidth;
+  card.classList.add("imprimiendo");
+
   const badge = $("ticket-estado");
   badge.textContent = ticket.estado;
   badge.className = "badge" + (ticket.estado === "procesado" ? " ok" : "");
@@ -330,42 +473,130 @@ function celda(texto, clase) {
   return td;
 }
 
-function mostrarComparativa(data) {
-  const cont = $("resultado-precios");
-  cont.textContent = "";
-  if (!data.supermercados.length) {
-    const p = document.createElement("p");
-    p.className = "muted";
-    p.textContent = `Aún no hay precios para «${data.nombre_normalizado}».`;
-    cont.appendChild(p);
-    return;
-  }
+// Importe en formato español: coma decimal y símbolo detrás.
+function euros(valor) {
+  return `${Number(valor).toFixed(2).replace(".", ",")} €`;
+}
 
+// ---- Impresión de resultados ----
+// Los resultados se pintan como un ticket de caja: cabecera del comercio,
+// concepto a la izquierda, importe a la derecha, doble raya antes del total.
+// No es decoración: alinear importes en columna es justo lo que hace legible
+// una comparación de precios.
+function papelNuevo(cont, titulo) {
+  cont.textContent = "";
+  const papel = document.createElement("div");
+  papel.className = "card recibo dentado imprimiendo";
+
+  const cabecera = document.createElement("p");
+  cabecera.className = "recibo-cabecera";
+  cabecera.textContent = "SuperComparateca";
+
+  const h = document.createElement("p");
+  h.className = "recibo-titulo";
+  h.textContent = titulo;
+
+  papel.append(cabecera, h, raya());
+  cont.appendChild(papel);
+  return papel;
+}
+
+function raya(doble = false) {
+  const hr = document.createElement("hr");
+  hr.className = doble ? "raya-doble" : "raya";
+  return hr;
+}
+
+function lineaTotal(concepto, importe) {
+  const fila = document.createElement("p");
+  fila.className = "recibo-total";
+  const izq = document.createElement("span");
+  izq.textContent = concepto;
+  const der = document.createElement("span");
+  der.className = "cifra";
+  der.textContent = importe;
+  fila.append(izq, der);
+  return fila;
+}
+
+// El sello. Es la firma de la interfaz: aparece una sola vez por resultado y
+// dice lo único que el usuario venía a saber.
+function sello(titulo, valor) {
+  const s = document.createElement("div");
+  s.className = "sello";
+  const t = document.createElement("span");
+  t.className = "sello-titulo";
+  t.textContent = `★ ${titulo}`;
+  const v = document.createElement("span");
+  v.className = "sello-valor";
+  v.textContent = valor;
+  s.append(t, v);
+  return s;
+}
+
+function tablaRecibo(cabeceras, filas) {
+  const wrap = document.createElement("div");
+  wrap.className = "tabla-scroll";
   const tabla = document.createElement("table");
+  tabla.className = "recibo-tabla";
+
   const thead = document.createElement("thead");
   const trHead = document.createElement("tr");
-  for (const titulo of ["Supermercado", "Precio actual", "Fecha", "Obs."]) {
+  for (const titulo of cabeceras) {
     const th = document.createElement("th");
     th.textContent = titulo;
     trHead.appendChild(th);
   }
   thead.appendChild(trHead);
-  tabla.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  data.supermercados.forEach((s, i) => {
+  for (const fila of filas) {
     const tr = document.createElement("tr");
-    // El primero es el más barato (la API ordena por precio ascendente).
-    tr.append(
-      celda(s.supermercado, i === 0 ? "barato" : ""),
-      celda(`${s.precio_actual} €`),
-      celda(s.fecha),
-      celda(String(s.num_observaciones)),
-    );
+    if (fila.gana) tr.className = "gana";
+    for (const texto of fila.celdas) tr.appendChild(celda(texto));
     tbody.appendChild(tr);
-  });
-  tabla.appendChild(tbody);
-  cont.appendChild(tabla);
+  }
+  tabla.append(thead, tbody);
+  wrap.appendChild(tabla);
+  return wrap;
+}
+
+function vacio(cont, texto) {
+  cont.textContent = "";
+  const p = document.createElement("p");
+  p.className = "vacio";
+  p.textContent = texto;
+  cont.appendChild(p);
+}
+
+function mostrarComparativa(data) {
+  const cont = $("resultado-precios");
+  if (!data.supermercados.length) {
+    vacio(cont, `Todavía no hay precios de «${data.nombre_normalizado}». Sube un ticket que lo incluya.`);
+    return;
+  }
+
+  const papel = papelNuevo(cont, data.nombre_normalizado);
+  // La API ordena por precio ascendente: el primero es el más barato.
+  papel.appendChild(
+    tablaRecibo(
+      ["Supermercado", "Obs.", "Precio"],
+      data.supermercados.map((s, i) => ({
+        gana: i === 0,
+        celdas: [s.supermercado, String(s.num_observaciones), euros(s.precio_actual)],
+      })),
+    ),
+  );
+
+  const barato = data.supermercados[0];
+  const caro = data.supermercados[data.supermercados.length - 1];
+  const diferencia = Number(caro.precio_actual) - Number(barato.precio_actual);
+
+  // Con un solo supermercado no hay nada que comparar: ni diferencia ni sello.
+  if (data.supermercados.length > 1) {
+    papel.append(raya(true), lineaTotal("Diferencia", euros(diferencia)));
+    papel.appendChild(sello("Más barato", barato.supermercado));
+  }
 }
 
 // ---- Cesta habitual (FR10) ----
@@ -379,48 +610,53 @@ $("btn-cesta").addEventListener("click", async () => {
 
 function mostrarCesta(data) {
   const cont = $("resultado-cesta");
-  cont.textContent = "";
   if (!data.productos.length) {
-    const p = document.createElement("p");
-    p.className = "muted";
-    p.textContent = "Aún no has confirmado productos en tus tickets.";
-    cont.appendChild(p);
+    vacio(cont, "Todavía no has confirmado productos en tus tickets. Asocia las líneas de uno y vuelve.");
     return;
   }
 
-  const resumen = document.createElement("p");
-  resumen.className = "muted";
-  resumen.textContent =
-    "Tu cesta: " +
-    data.productos.map((p) => `${p.nombre_normalizado} (×${p.veces_comprado})`).join(", ");
-  cont.appendChild(resumen);
+  const papel = papelNuevo(cont, "Cesta habitual");
 
-  const tabla = document.createElement("table");
-  const thead = document.createElement("thead");
-  const trHead = document.createElement("tr");
-  for (const titulo of ["Supermercado", "Total cesta", "Productos con precio"]) {
-    const th = document.createElement("th");
-    th.textContent = titulo;
-    trHead.appendChild(th);
-  }
-  thead.appendChild(trHead);
-  tabla.appendChild(thead);
+  // Lo que compone la cesta, impreso como el detalle de un ticket.
+  papel.appendChild(
+    tablaRecibo(
+      ["Producto", "Veces"],
+      data.productos.map((p) => ({
+        celdas: [p.nombre_normalizado, `×${p.veces_comprado}`],
+      })),
+    ),
+  );
 
   const total = data.productos.length;
-  const tbody = document.createElement("tbody");
-  data.supermercados.forEach((s, i) => {
-    const tr = document.createElement("tr");
-    // La API ordena por cobertura y luego por total: el primero es el mejor
-    // candidato real, no solo el de suma más baja.
-    tr.append(
-      celda(s.supermercado, i === 0 ? "barato" : ""),
-      celda(`${s.total} €`),
-      celda(`${s.productos_cubiertos} de ${total}`),
-    );
-    tbody.appendChild(tr);
-  });
-  tabla.appendChild(tbody);
-  cont.appendChild(tabla);
+  papel.append(raya(true));
+
+  // La API ordena por cobertura y luego por total: el primero es el mejor
+  // candidato real, no solo el de suma más baja.
+  papel.appendChild(
+    tablaRecibo(
+      ["Supermercado", "Cubre", "Total"],
+      data.supermercados.map((s, i) => ({
+        gana: i === 0,
+        celdas: [s.supermercado, `${s.productos_cubiertos}/${total}`, euros(s.total)],
+      })),
+    ),
+  );
+
+  if (data.supermercados.length) {
+    const mejor = data.supermercados[0];
+    papel.appendChild(sello("Tu cesta sale mejor en", mejor.supermercado));
+    // Un supermercado con pocos productos tendría un total engañosamente bajo:
+    // se avisa en vez de dejar que la cifra hable sola.
+    if (mejor.productos_cubiertos < total) {
+      const nota = document.createElement("p");
+      nota.className = "muted";
+      nota.style.textAlign = "center";
+      nota.textContent =
+        `Solo tiene precio de ${mejor.productos_cubiertos} de tus ${total} productos, ` +
+        "así que el total no es comparable del todo.";
+      papel.appendChild(nota);
+    }
+  }
 }
 
 // ---- Arranque ----

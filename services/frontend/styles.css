@@ -1,48 +1,330 @@
-/* Mobile-first: los estilos base son los del movil y el escritorio es la
-   excepcion, no al reves. Referencia de trabajo: iPhone 13 (390 px). */
+/* SuperComparateca — sistema visual "ticket".
+ *
+ * La idea: la app esta hecha del mismo material que su materia prima, el
+ * ticket de compra. Papel termico, tinta matricial, cifras monoespaciadas
+ * alineadas a la derecha, rayas discontinuas en vez de cajas, y el corte
+ * dentado del papel al arrancarlo.
+ *
+ * Eso no es decoracion: comparar precios EXIGE cifras tabulares alineadas, y
+ * la jerarquia de un ticket (concepto a la izquierda, importe a la derecha,
+ * doble raya antes del total) es exactamente la jerarquia que necesita esta
+ * pantalla.
+ *
+ * Disciplina: el borde dentado aparece SOLO en las superficies que representan
+ * papel emitido (el ticket escaneado y la comparativa impresa), y el sello de
+ * MAS BARATO sale una sola vez por pantalla. Todo lo demas se mantiene callado.
+ *
+ * Mobile-first. Referencia de trabajo: iPhone 13 (390 px).
+ * Sin dependencias, sin build, sin fuentes externas.
+ */
+
+/* ============================================================
+   1. Tokens
+   ============================================================ */
+
+:root {
+  color-scheme: light dark;
+
+  /* -- Tipografia --
+     La monoespaciada no es un adorno de "aspecto tecnico": es la que alinea
+     los importes en columna. Se usa para TODO lo numerico y para las lineas
+     de ticket; la de sistema queda para la prosa. */
+  --mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --txt-xs: 0.75rem;
+  --txt-sm: 0.875rem;
+  --txt-base: 1rem;
+  --txt-lg: 1.125rem;
+  --txt-xl: 1.375rem;
+  --txt-2xl: 1.75rem;
+
+  /* Tracking ancho para los rotulos en versalitas, como las cabeceras de caja. */
+  --track: 0.14em;
+
+  /* -- Espaciado, base 4 px. Usar siempre un peldano. -- */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+  --sp-7: 3rem;
+
+  /* El papel casi no tiene esquinas redondeadas: el ticket se corta recto. */
+  --radio: 2px;
+  --radio-boton: 3px;
+
+  --ancho-max: 720px;
+  --alto-tabs: 4rem;
+  /* Alto del corte dentado. */
+  --diente-alto: 9px;
+  --diente-ancho: 14px;
+
+  /* -- Color --
+     Papel termico calido, tinta negra calida. No es el crema tipico de
+     revista: va emparejado con monoespaciada, no con una serif de contraste. */
+  --papel: #f6f4ee;
+  --papel-alt: #edeae1;
+  --papel-hueco: #e3dfd4;
+  --tinta: #16150f;
+  --tinta-media: #6b6659;
+  --tinta-tenue: #b3ac9c;
+
+  /* Verde de "mas barato": es una senal funcional, no un color de marca. */
+  --verde: #1c6b3f;
+  --verde-suave: #dfeee4;
+  --rojo: #a8291f;
+  --rojo-suave: #f6e0dd;
+  --ambar: #7a5300;
+  --ambar-suave: #f7e7c2;
+
+  /* La barra de pestanas es el unico elemento de tinta solida: la maquina
+     frente al papel. */
+  --barra: var(--tinta);
+  --barra-texto: #f6f4ee;
+  --barra-apagado: #8e897c;
+
+  --sombra: 0 1px 2px rgb(22 21 15 / 8%), 0 6px 18px rgb(22 21 15 / 6%);
+  --foco: 2px solid var(--tinta);
+}
+
+/* En oscuro el papel no se invierte: pasa a ser la COPIA DE CARBON. Superficie
+   de pizarra, tinta hueso, y las mismas relaciones de contraste. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --papel: #191a1c;
+    --papel-alt: #212326;
+    --papel-hueco: #2b2e32;
+    --tinta: #e9e5d9;
+    --tinta-media: #9c968a;
+    --tinta-tenue: #5c5850;
+
+    --verde: #6cc38c;
+    --verde-suave: #14301f;
+    --rojo: #eb8b82;
+    --rojo-suave: #341714;
+    --ambar: #e5bb64;
+    --ambar-suave: #33280d;
+
+    --barra: #0f1011;
+    --barra-texto: #e9e5d9;
+    --barra-apagado: #7d786e;
+
+    --sombra: 0 1px 2px rgb(0 0 0 / 40%), 0 6px 18px rgb(0 0 0 / 30%);
+    --foco: 2px solid var(--tinta);
+  }
+}
+
+/* ============================================================
+   2. Base
+   ============================================================ */
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: #f4f5f7;
-  color: #1c2733;
-  /* Evita que iOS reescale el texto al girar el movil. */
+  font-family: var(--sans);
+  font-size: var(--txt-base);
+  line-height: 1.5;
+  background: var(--papel-hueco);
+  color: var(--tinta);
   -webkit-text-size-adjust: 100%;
 }
 
+h1, h2, h3 { line-height: 1.2; }
+
+/* La cabecera es la primera linea del ticket: nombre del comercio centrado y
+   espaciado. Acompana al scroll porque en la pantalla de lineas se baja mucho
+   y el boton de salir quedaba inalcanzable. */
 header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: .75rem;
-  padding: .9rem 1rem;
-  background: #2d7d46;
-  color: #fff;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--papel);
+  border-bottom: 1px dashed var(--tinta-tenue);
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
-header h1 { margin: 0; font-size: 1.15rem; }
+header h1 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--txt-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+}
 
 main {
-  max-width: 760px;
-  margin: 1rem auto;
-  padding: 0 1rem;
+  max-width: var(--ancho-max);
+  margin: var(--sp-4) auto;
+  padding: 0 var(--sp-4) calc(var(--alto-tabs) + env(safe-area-inset-bottom) + var(--sp-4));
   display: grid;
-  gap: 1rem;
+  gap: var(--sp-4);
 }
 
-/* Una columna en movil; dos solo cuando hay sitio de sobra. */
-#vista-auth { display: grid; gap: 1rem; }
+/* ============================================================
+   3. Primitivas de ticket
+   ============================================================ */
 
+/* Rotulo en versalitas: la etiqueta impresa sobre cada bloque de la caja. */
+.rotulo {
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  color: var(--tinta-media);
+}
+
+/* Cualquier cifra: monoespaciada, tabular y a la derecha. Es lo que permite
+   leer una columna de precios de un vistazo. */
+.cifra {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* El corte del papel. Se recorta con mascara, asi que el elemento no puede
+   llevar sombra ni borde inferior: se compensa con el color de fondo. */
+.dentado {
+  padding-bottom: calc(var(--diente-alto) + var(--sp-4));
+  -webkit-mask:
+    conic-gradient(from 135deg at bottom, #0000, #000 1deg 89deg, #0000 90deg)
+      bottom / var(--diente-ancho) var(--diente-alto) repeat-x,
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--diente-alto)) no-repeat;
+  mask:
+    conic-gradient(from 135deg at bottom, #0000, #000 1deg 89deg, #0000 90deg)
+      bottom / var(--diente-ancho) var(--diente-alto) repeat-x,
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--diente-alto)) no-repeat;
+}
+/* Sin soporte de mascara el papel simplemente queda con el borde recto. */
+@supports not (mask: conic-gradient(#000, #000)) {
+  .dentado { padding-bottom: var(--sp-4); }
+}
+
+/* Raya discontinua: el ticket separa bloques con rayas, no con cajas. */
+.raya {
+  border: 0;
+  border-top: 1px dashed var(--tinta-tenue);
+  margin: var(--sp-3) 0;
+}
+
+/* Doble raya: solo antes de un total. Es la senal mas fuerte del ticket y por
+   eso se reserva para el dato que de verdad cierra la cuenta. */
+.raya-doble {
+  border: 0;
+  border-top: 3px double var(--tinta-media);
+  margin: var(--sp-3) 0;
+}
+
+/* El sello. Es la firma de la interfaz y aparece UNA vez por pantalla. */
+.sello {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  align-self: center;
+  margin: var(--sp-2) auto 0;
+  padding: var(--sp-2) var(--sp-4);
+  border: 2px solid var(--verde);
+  border-radius: var(--radio);
+  color: var(--verde);
+  font-family: var(--mono);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  line-height: 1.25;
+  /* Ligeramente torcido, como un sello puesto a mano. */
+  transform: rotate(-3deg);
+}
+.sello .sello-titulo { font-size: var(--txt-xs); }
+.sello .sello-valor { font-size: var(--txt-base); }
+
+/* ============================================================
+   4. Navegacion
+   ============================================================ */
+
+.tabs {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  background: var(--barra);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: var(--alto-tabs);
+  padding: var(--sp-2) var(--sp-1);
+  border: none;
+  background: none;
+  color: var(--barra-apagado);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  border-top: 2px solid transparent;
+}
+.tab .icono { font-size: 1.15rem; line-height: 1; }
+.tab[aria-selected="true"] {
+  color: var(--barra-texto);
+  border-top-color: var(--barra-texto);
+}
+.tab:focus-visible { outline: 2px solid var(--barra-texto); outline-offset: -4px; }
+
+/* ============================================================
+   5. Componentes
+   ============================================================ */
+
+/* Hoja de papel. Sin sombra grande ni esquinas blandas: es una hoja apoyada. */
 .card {
-  background: #fff;
-  border-radius: 10px;
-  padding: 1rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  background: var(--papel);
+  border-radius: var(--radio);
+  padding: var(--sp-4);
+  box-shadow: var(--sombra);
 }
-.card h2 { margin-top: 0; font-size: 1.05rem; }
+/* Papel emitido: lleva el corte dentado. Solo el ticket y la comparativa. */
+.card.recibo {
+  padding-left: var(--sp-5);
+  padding-right: var(--sp-5);
+}
+.card > h2 {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--mono);
+  font-size: var(--txt-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+}
+.card > h2 + .muted { margin-top: calc(var(--sp-2) * -1); }
 
-form { display: grid; gap: .6rem; }
+.titulo-seccion {
+  margin: var(--sp-2) 0 calc(var(--sp-2) * -1);
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  color: var(--tinta-media);
+}
+
+/* -- Formularios -- */
+form { display: grid; gap: var(--sp-3); }
 /* Sin esto, los hijos de un grid tienen min-width:auto y no encogen por debajo
    de su contenido. El <input type="file"> trae un ancho minimo intrinseco (el
    boton mas "ningun archivo seleccionado") que ensanchaba toda la pagina. */
@@ -50,37 +332,83 @@ form > * { min-width: 0; }
 
 /* Los hijos crecen, pero no por debajo de un ancho usable: en 390 px tres
    controles a 1/3 quedaban inservibles, asi que envuelven. */
-.fila { display: flex; gap: .5rem; margin-bottom: .75rem; flex-wrap: wrap; }
+.fila { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-3); flex-wrap: wrap; }
 .fila > * { flex: 1 1 10rem; min-width: 0; }
+.fila:last-child { margin-bottom: 0; }
 
 input, select, button, textarea {
   /* 16px es el minimo: por debajo, Safari en iOS hace zoom al enfocar el
      campo y descoloca toda la pagina. No bajar de aqui. */
   font-size: 16px;
   font-family: inherit;
-  padding: .6rem .7rem;
-  border: 1px solid #ccd3da;
-  border-radius: 6px;
+  padding: var(--sp-2) var(--sp-3);
+  /* Los campos son huecos rellenables del impreso: raya abajo, no caja. */
+  border: 1px solid var(--tinta-tenue);
+  border-radius: var(--radio);
   /* Objetivo tactil comodo (Apple recomienda 44 px). */
   min-height: 44px;
+  background: var(--papel-alt);
+  color: var(--tinta);
 }
-input[type="file"] { padding: .5rem; }
+input[type="file"] { padding: var(--sp-2); }
+input::placeholder { color: var(--tinta-media); }
 
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: var(--foco);
+  outline-offset: 1px;
+  background: var(--papel);
+}
+
+/* El boton primario es tinta solida: la unica mancha densa de la hoja. */
 button {
-  background: #2d7d46;
-  color: #fff;
-  border: none;
+  background: var(--tinta);
+  color: var(--papel);
+  border: 1px solid var(--tinta);
+  border-radius: var(--radio-boton);
+  font-family: var(--mono);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   cursor: pointer;
 }
-button:hover { background: #276b3c; }
-button:focus-visible { outline: 3px solid #1c2733; outline-offset: 2px; }
-button.sec { background: #e7ebef; color: #1c2733; }
+button:hover { background: var(--tinta-media); border-color: var(--tinta-media); }
+button:disabled { background: var(--tinta-tenue); border-color: var(--tinta-tenue); cursor: progress; }
+button:focus-visible { outline: var(--foco); outline-offset: 2px; }
 
-/* ---- Tablas ----
+button.sec {
+  background: none;
+  color: var(--tinta);
+  border-color: var(--tinta-media);
+}
+button.sec:hover { background: var(--papel-alt); }
+
+button.ghost {
+  background: none;
+  border-color: transparent;
+  color: var(--tinta-media);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+button.ghost:hover { background: var(--rojo-suave); color: var(--rojo); border-color: transparent; }
+
+header button {
+  background: none;
+  color: var(--tinta-media);
+  border-color: var(--tinta-tenue);
+  font-size: var(--txt-xs);
+  padding: var(--sp-1) var(--sp-2);
+  min-height: 34px;
+}
+header button:hover { background: var(--papel-alt); color: var(--tinta); }
+
+/* -- Tablas de ticket --
    Cualquier contenedor de resultados desborda dentro de si mismo, para que
-   nunca aparezca scroll horizontal en el body. */
-#resultado-precios,
-#resultado-cesta,
+   nunca aparezca scroll horizontal en el body. Va en el envoltorio de la
+   tabla, no en el papel: una mascara con overflow propio recortaria el
+   dentado. */
 .tabla-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -89,107 +417,303 @@ button.sec { background: #e7ebef; color: #1c2733; }
 table { width: 100%; border-collapse: collapse; }
 th, td {
   text-align: left;
-  padding: .5rem;
-  border-bottom: 1px solid #eceef1;
-  font-size: .92rem;
+  padding: var(--sp-2) 0;
+  font-size: var(--txt-sm);
 }
-td { font-variant-numeric: tabular-nums; }
-
-/* ---- Lineas del ticket ----
-   Es la pantalla donde mas se trabaja, y una tabla de 3 columnas con un
-   campo de texto dentro no cabe en un movil. En pantallas estrechas cada
-   fila se apila como una ficha, con la etiqueta de cada dato delante. */
-#tabla-lineas thead { display: none; }
-#tabla-lineas tr {
-  display: block;
-  padding: .75rem 0;
-  border-bottom: 1px solid #eceef1;
-}
-#tabla-lineas tr:last-child { border-bottom: none; }
-#tabla-lineas td {
-  display: block;
-  border: none;
-  padding: .15rem 0;
-}
-#tabla-lineas td[data-label]::before {
-  content: attr(data-label);
-  display: block;
-  font-size: .72rem;
+th {
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .06em;
-  color: #6b7683;
+  letter-spacing: 0.08em;
+  color: var(--tinta-media);
+  border-bottom: 1px dashed var(--tinta-tenue);
 }
-#tabla-lineas td[data-label="Texto"] { font-weight: 600; }
-#tabla-lineas td[data-label="Producto"] { margin-top: .4rem; }
+td { border-bottom: 1px dashed var(--tinta-tenue); }
+tr:last-child td { border-bottom: none; }
 
-.badge {
-  font-size: .75rem;
-  background: #ffe6a7;
-  color: #7a5900;
-  padding: .15rem .5rem;
-  border-radius: 999px;
-  vertical-align: middle;
+/* La ultima columna de una tabla de ticket es siempre el importe. */
+.recibo-tabla td:last-child,
+.recibo-tabla th:last-child {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
-.badge.ok { background: #c9f0d4; color: #1c5c31; }
+.recibo-tabla td:first-child {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  font-size: var(--txt-sm);
+}
+/* La fila ganadora se marca con tinta, no con fondo de color: en un ticket no
+   hay fondos, hay enfasis de impresion. */
+.recibo-tabla tr.gana td { font-weight: 700; color: var(--verde); }
 
-.muted { color: #6b7683; font-size: .88rem; }
-
-.sugerencias {
+/* Cabecera impresa de la comparativa. */
+.recibo-cabecera {
+  text-align: center;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  font-size: var(--txt-xs);
+  color: var(--tinta-media);
+  margin: 0;
+}
+.recibo-titulo {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: var(--txt-base);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin: var(--sp-2) 0;
+}
+/* Linea de cierre: concepto a la izquierda, importe a la derecha. */
+.recibo-total {
   display: flex;
-  align-items: center;
-  gap: .4rem;
-  flex-wrap: wrap;
-  margin-top: .5rem;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-3);
+  font-family: var(--mono);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
-.sugerencias button {
-  flex: 0 1 auto;
-  font-size: .9rem;
-  padding: .35rem .7rem;
-  min-height: 38px;
+.recibo-total .cifra { font-size: var(--txt-lg); }
+
+.badge {
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--ambar-suave);
+  color: var(--ambar);
+  padding: 2px var(--sp-2);
+  border-radius: var(--radio);
+  white-space: nowrap;
 }
+.badge.ok { background: var(--verde-suave); color: var(--verde); }
+
+.muted { color: var(--tinta-media); font-size: var(--txt-sm); }
+.barato { color: var(--verde); font-weight: 700; }
+
+#mensaje {
+  position: fixed;
+  bottom: calc(var(--alto-tabs) + env(safe-area-inset-bottom) + var(--sp-3));
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  background: var(--tinta);
+  color: var(--papel);
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  max-width: calc(100% - var(--sp-6));
+  text-align: center;
+  font-family: var(--mono);
+  font-size: var(--txt-sm);
+  z-index: 30;
+}
+#mensaje.error { background: var(--rojo); color: #fff; }
 
 /* Utilidad: tiene que ganar siempre. Sin !important, `#vista-auth {display:grid}`
    le gana por especificidad de ID y el formulario de login NO se oculta al
    entrar, quedandose visible por encima de la aplicacion. */
 .hidden { display: none !important; }
 
-#mensaje {
-  position: fixed;
-  /* Separado del borde inferior para no quedar bajo la barra de Safari. */
-  bottom: max(1rem, env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  background: #1c2733;
-  color: #fff;
-  padding: .6rem 1rem;
-  border-radius: 8px;
-  max-width: calc(100% - 2rem);
-  text-align: center;
-  z-index: 10;
+/* ============================================================
+   6. Pantallas
+   ============================================================ */
+
+#vista-auth { display: grid; gap: var(--sp-4); }
+
+/* Sin sesion no hay pestanas, asi que el hueco reservado abajo sobra. */
+body.sin-sesion main { padding-bottom: var(--sp-6); }
+
+/* -- Listado de tickets --
+   Cada ticket es un resguardo apilado: fila pulsable entera, no un enlace
+   pequeno, porque se usa con el movil en una mano. */
+.lista-tickets { display: grid; gap: var(--sp-2); }
+
+.ticket-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-right: var(--sp-2);
+  background: var(--papel-alt);
+  border-left: 3px solid var(--tinta-tenue);
+  border-radius: var(--radio);
 }
-#mensaje.error { background: #b03030; }
+.ticket-item:hover { border-left-color: var(--tinta); }
+.ticket-item[aria-current="true"] { border-left-color: var(--verde); background: var(--verde-suave); }
 
-.barato { color: #1c5c31; font-weight: 600; }
+/* La zona de abrir es un boton a lo ancho de la fila, para que el area
+   pulsable sea grande. Hay que neutralizar los estilos del boton primario. */
+.ticket-item .info {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: var(--sp-3);
+  min-height: 56px;
+  color: inherit;
+  font-family: var(--mono);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.ticket-item .info:hover { background: none; }
+.ticket-item .titulo {
+  display: block;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: var(--txt-sm);
+}
+.ticket-item .sub {
+  display: block;
+  font-size: var(--txt-xs);
+  color: var(--tinta-media);
+}
+.ticket-item .acciones { flex: 0 0 auto; }
 
-/* ---- A partir de tablet: se recupera el diseno de dos columnas y la
-   tabla de lineas vuelve a ser una tabla de verdad. ---- */
+/* -- Lineas del ticket --
+   Es la pantalla donde mas se trabaja, y una tabla de 3 columnas con un
+   campo de texto dentro no cabe en un movil. En pantallas estrechas cada
+   fila se apila como una ficha, con la etiqueta de cada dato delante. */
+#tabla-lineas thead { display: none; }
+#tabla-lineas tr {
+  display: block;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px dashed var(--tinta-tenue);
+}
+#tabla-lineas tr:last-child { border-bottom: none; }
+#tabla-lineas td {
+  display: block;
+  border: none;
+  padding: var(--sp-1) 0;
+  font-size: var(--txt-base);
+}
+#tabla-lineas td[data-label]::before {
+  content: attr(data-label);
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  color: var(--tinta-media);
+}
+/* El texto tal cual salio del OCR: se muestra con la misma letra con la que
+   se imprimio. */
+#tabla-lineas td[data-label="Texto"] {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+#tabla-lineas td[data-label="Precio"] {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+#tabla-lineas td[data-label="Producto"] { margin-top: var(--sp-2); }
+
+.sugerencias {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+}
+.sugerencias button {
+  flex: 0 1 auto;
+  font-size: var(--txt-sm);
+  padding: var(--sp-1) var(--sp-3);
+  min-height: 38px;
+}
+
+/* Un impreso en blanco no explica que hacer. */
+.vacio {
+  text-align: center;
+  color: var(--tinta-media);
+  font-family: var(--mono);
+  font-size: var(--txt-sm);
+  padding: var(--sp-6) var(--sp-4);
+}
+
+/* ============================================================
+   7. A partir de tablet
+   ============================================================ */
+
 @media (min-width: 40rem) {
-  header { padding: 1rem 1.5rem; }
-  header h1 { font-size: 1.3rem; }
-  main { margin: 1.5rem auto; gap: 1.25rem; }
-  .card { padding: 1.25rem; }
+  :root { --alto-tabs: 0rem; }
 
-  #vista-auth { grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  header { padding: var(--sp-4) var(--sp-5); }
+  header h1 { font-size: var(--txt-base); }
+
+  main {
+    margin: var(--sp-5) auto;
+    padding: 0 var(--sp-4) var(--sp-7);
+    gap: var(--sp-5);
+  }
+  .card { padding: var(--sp-5); }
+  .card.recibo { padding-left: var(--sp-6); padding-right: var(--sp-6); }
+
+  /* Las pestanas dejan de estar fijas al pie: pasan a ser el rotulo de la
+     maquina bajo la cabecera. */
+  .tabs {
+    position: static;
+    max-width: var(--ancho-max);
+    margin: var(--sp-5) auto calc(var(--sp-5) * -1);
+    border-radius: var(--radio);
+    padding: 0;
+    overflow: hidden;
+  }
+  .tab {
+    flex: 1 1 auto;
+    flex-direction: row;
+    gap: var(--sp-2);
+    min-height: 46px;
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--txt-xs);
+    border-top: none;
+    border-bottom: 2px solid transparent;
+  }
+  .tab[aria-selected="true"] { border-bottom-color: var(--barra-texto); }
+  .tab:focus-visible { outline-offset: -3px; }
+
+  #mensaje { bottom: var(--sp-5); }
+
+  #vista-auth { grid-template-columns: 1fr 1fr; align-items: start; }
 
   #tabla-lineas thead { display: table-header-group; }
   #tabla-lineas tr { display: table-row; padding: 0; }
   #tabla-lineas td {
     display: table-cell;
-    border-bottom: 1px solid #eceef1;
-    padding: .5rem;
+    border-bottom: 1px dashed var(--tinta-tenue);
+    padding: var(--sp-2) var(--sp-2) var(--sp-2) 0;
+    font-size: var(--txt-sm);
   }
   #tabla-lineas td[data-label]::before { display: none; }
   #tabla-lineas td[data-label="Texto"] { font-weight: 400; }
   #tabla-lineas td[data-label="Producto"] { margin-top: 0; }
+}
+
+/* ============================================================
+   8. Movimiento
+   ============================================================ */
+
+@media (prefers-reduced-motion: no-preference) {
+  .tab, button, .ticket-item { transition: background-color .12s linear, color .12s linear, border-color .12s linear; }
+
+  /* El papel sale de la maquina: la comparativa y el ticket recien abierto
+     aparecen deslizandose hacia abajo, recortados por su propio contenedor.
+     Es el unico movimiento de la interfaz. */
+  .imprimiendo { animation: imprimir .32s cubic-bezier(.2, .7, .3, 1); }
+  @keyframes imprimir {
+    from { transform: translateY(-8px); opacity: 0; }
+    to   { transform: none; opacity: 1; }
+  }
 }
