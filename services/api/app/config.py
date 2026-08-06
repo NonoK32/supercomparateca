@@ -41,6 +41,23 @@ class Settings(BaseSettings):
     turnstile_site_key: str = ""
     turnstile_secret_key: str = ""
 
+    # Correo transaccional (Resend): verificación de email y recuperación de
+    # contraseña. Sin `resend_api_key` no se envía nada y los mensajes van al
+    # log (ver correo.py), que es lo cómodo en desarrollo.
+    resend_api_key: str = ""
+    # El dominio del remitente tiene que estar verificado en Resend, con sus
+    # registros SPF/DKIM en el DNS, o los correos se rechazan o van a spam.
+    correo_remitente: str = "SuperComparateca <no-reply@supercomparateca.com>"
+    # Base de los enlaces que se mandan por correo. Apunta al FRONTEND, no a la
+    # api: quien abre el enlace es una persona con un navegador.
+    frontend_url: str = "http://localhost:8090"
+
+    # Caducidad de los enlaces enviados por correo. La verificación es larga
+    # (la gente no mira el correo al momento); el restablecimiento es corto
+    # porque da acceso a la cuenta a quien tenga el enlace.
+    verificacion_expira_horas: int = 24
+    reset_expira_minutos: int = 60
+
     # Matching por similitud (§5bis punto 3). Por encima de `umbral_auto` se
     # asigna el producto sin preguntar; entre sugerencia y auto se propone al
     # usuario. Configurables porque hay que recalibrarlos con tickets reales

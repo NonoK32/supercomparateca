@@ -35,15 +35,24 @@
   <main>
     <!-- Login / registro -->
     <section id="vista-auth">
-      <div class="card">
+      <div class="card" id="card-login">
         <h2>Entrar</h2>
         <form id="form-login">
           <input type="email" id="login-email" placeholder="email" required>
           <input type="password" id="login-password" placeholder="contraseña" required>
           <button type="submit">Iniciar sesión</button>
         </form>
+        <p><button type="button" id="btn-olvide" class="enlace">¿Has olvidado tu contraseña?</button></p>
+
+        <!-- Aparece solo si el login falla por falta de confirmación. -->
+        <div id="aviso-sin-verificar" class="hidden">
+          <hr class="raya">
+          <p class="muted">¿No te ha llegado el correo de confirmación?</p>
+          <button type="button" id="btn-reenviar" class="sec">Reenviármelo</button>
+        </div>
       </div>
-      <div class="card">
+
+      <div class="card" id="card-registro">
         <h2>Crear cuenta</h2>
         <form id="form-registro">
           <input type="text" id="reg-nombre" placeholder="nombre" required>
@@ -53,6 +62,29 @@
                la clave de sitio (desarrollo): ver montarTurnstile() en app.js. -->
           <div id="turnstile-registro"></div>
           <button type="submit">Registrarme</button>
+        </form>
+      </div>
+
+      <!-- Pedir el enlace de recuperación. Sustituye a las dos tarjetas de
+           arriba mientras está activa, para que no compitan. -->
+      <div class="card hidden" id="card-recuperar">
+        <h2>Recuperar contraseña</h2>
+        <p class="muted">Te enviamos un enlace para elegir una nueva.</p>
+        <form id="form-recuperar">
+          <input type="email" id="rec-email" placeholder="email" required>
+          <button type="submit">Enviarme el enlace</button>
+          <button type="button" id="btn-rec-volver" class="sec">Volver</button>
+        </form>
+      </div>
+
+      <!-- Se muestra al abrir el enlace del correo (?restablecer=…). -->
+      <div class="card hidden" id="card-restablecer">
+        <h2>Elige una contraseña nueva</h2>
+        <form id="form-restablecer">
+          <input type="password" id="res-password" placeholder="contraseña nueva (mín. 8)"
+                 required minlength="8" autocomplete="new-password">
+          <button type="submit">Guardar y entrar</button>
+          <button type="button" id="btn-res-volver" class="sec">Volver</button>
         </form>
       </div>
     </section>

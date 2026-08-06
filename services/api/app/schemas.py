@@ -20,6 +20,26 @@ class AuthConfig(BaseModel):
     """Configuración pública que el frontend necesita antes de registrarse."""
 
     turnstile_site_key: str
+    # Si el envío de correo NO está configurado, la verificación de email no
+    # llega a nadie y nadie puede entrar. Se publica para que el smoke test lo
+    # detecte tras cada despliegue, en vez de descubrirlo por un usuario que no
+    # recibe nada. No revela ningún secreto: solo si el servicio está en pie.
+    correo_activo: bool
+
+
+class SolicitarCorreo(BaseModel):
+    """Pedir que se reenvíe un correo (verificación o recuperación)."""
+
+    email: EmailStr
+
+
+class VerificarEmail(BaseModel):
+    token: str
+
+
+class RestablecerPassword(BaseModel):
+    token: str
+    password: str = Field(min_length=8, max_length=72)
 
 
 class BorrarCuenta(BaseModel):

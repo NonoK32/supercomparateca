@@ -94,7 +94,19 @@ if [ "$modo" = "prod" ]; then
   fi
 fi
 
-# --- 4. Rate limit (opcional) ---
+# --- 4. El envio de correo esta configurado ---
+# Sin proveedor, el registro no puede mandar la confirmacion; y como sin
+# confirmar no se entra, NADIE podria darse de alta. Mismo motivo que con
+# Turnstile: que no se descubra por un usuario que no recibe nada.
+if [ "$modo" = "prod" ]; then
+  if curl -s -m 10 "$API/auth/config" 2>/dev/null | grep -q '"correo_activo":true'; then
+    ok "el envio de correo esta configurado"
+  else
+    mal "no hay proveedor de correo: nadie puede confirmar su cuenta ni recuperar la contraseña (revisa RESEND_API_KEY)"
+  fi
+fi
+
+# --- 5. Rate limit (opcional) ---
 if [ "$probar_limite" = "1" ]; then
   vistos=""
   for _ in $(seq 1 20); do

@@ -634,6 +634,28 @@ body.sin-sesion main { padding-bottom: var(--sp-6); }
   min-height: 38px;
 }
 
+/* Boton que se lee como enlace: acciones secundarias dentro de un formulario
+   («¿has olvidado tu contraseña?»). Sigue siendo <button> porque no navega a
+   ningun sitio, solo cambia lo que se ve. */
+.enlace {
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: 0;
+  font-family: var(--sans);
+  font-size: var(--txt-sm);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--tinta-media);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.enlace:hover { background: none; color: var(--tinta); }
+/* El area pulsable si respeta el minimo tactil, aunque el texto sea pequeño. */
+#card-login .enlace { padding: var(--sp-2) 0; }
+
 /* -- Zona de baja --
    Al pie y en voz baja: tiene que ser alcanzable siempre (es un derecho, no
    un ajuste escondido) pero sin competir con el trabajo del dia a dia. */

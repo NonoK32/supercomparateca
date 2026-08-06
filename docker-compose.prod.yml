@@ -66,6 +66,9 @@ services:
     ports: []
     environment:
       CORS_ORIGINS: https://${DOMAIN}
+      # Los enlaces de confirmación y recuperación tienen que apuntar al
+      # dominio real, no al localhost del compose base.
+      FRONTEND_URL: https://${DOMAIN}
     labels:
       - traefik.enable=true
       - traefik.http.routers.api.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)

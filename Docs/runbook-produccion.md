@@ -504,6 +504,49 @@ Las que se compilaron en el servidor quedan ocupando disco. Se liberan con:
 sudo docker image prune -a --filter "until=24h"
 ```
 
+## Activar el correo (confirmación de cuenta y recuperación de contraseña)
+
+**Sin esto nadie puede registrarse.** Confirmar el correo es obligatorio para
+entrar, así que si no hay proveedor el alta se queda a medias: el registro
+devuelve 502 y se deshace solo. El smoke test lo comprueba en cada despliegue.
+
+1. En <https://resend.com> → *API Keys* → crea una con permiso de envío.
+2. **Domains** → *Add domain* → `supercomparateca.com`. Resend te da unos
+   registros **DKIM** (y un `MX`/`TXT` de retorno) que hay que añadir en el DNS
+   del dominio. Sin ellos los correos van a spam o se rechazan directamente.
+   La verificación del dominio tarda entre minutos y unas horas.
+3. En el `.env` del servidor:
+
+   ```bash
+   sudo nano /opt/supercomparateca/.env
+   # RESEND_API_KEY=re_...
+   # CORREO_REMITENTE=SuperComparateca <no-reply@supercomparateca.com>
+   ```
+
+   El remitente **tiene que ser del dominio verificado**. `FRONTEND_URL` no hace
+   falta tocarlo: el override de producción lo fija a `https://$DOMAIN`.
+
+4. Redespliega y comprueba:
+
+   ```bash
+   cd /opt/supercomparateca && sudo ./scripts/deploy.sh prod
+   curl -s https://supercomparateca.com/api/auth/config
+   # -> {"turnstile_site_key":"0x...","correo_activo":true}
+   ```
+
+   `"correo_activo":false` significa que la clave no ha llegado al contenedor.
+
+> **Mientras tanto, en desarrollo**, sin `RESEND_API_KEY` no se envía nada: el
+> mensaje entero (con su enlace) se escribe en el log del `api`. Para probar el
+> flujo sin cuenta: `docker compose logs -f api` y busca `CORREO NO ENVIADO`.
+
+### Si alguien se queda sin poder entrar
+
+Los enlaces caducan: 24 h el de confirmación, 60 min el de recuperación. Ambos
+se pueden volver a pedir desde la propia pantalla de acceso («Reenviármelo» y
+«¿Has olvidado tu contraseña?»). El de recuperación además es **de un solo
+uso**: al cambiar la contraseña, los enlaces pendientes dejan de valer.
+
 ## Backups: comprobar que sirven
 
 Un backup que nunca se ha restaurado no es un backup, es un fichero. Los tres

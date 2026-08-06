@@ -6,10 +6,21 @@ def _autenticar(context, email="usuario@example.com", password="password123"):
         "/auth/registro",
         json={"nombre": "Usuario", "email": email, "password": password},
     )
+    _confirmar_correo(context)
     token = context.client.post(
         "/auth/login", data={"username": email, "password": password}
     ).json()["access_token"]
     context.client.headers["Authorization"] = f"Bearer {token}"
+
+
+def _confirmar_correo(context):
+    """Confirma el correo del último registro siguiendo el enlace del mensaje.
+
+    Sin esto no se puede iniciar sesión: la verificación es obligatoria.
+    """
+    token = context.client.correo.token("verificar")
+    if token:
+        context.client.post("/auth/verificar", json={"token": token})
 
 
 # ---- Autenticación ----
@@ -25,6 +36,30 @@ def paso_registro(context, email, password):
         json={"nombre": "Usuario", "email": email, "password": password},
     )
     assert context.response.status_code == 201, context.response.text
+
+
+@given("confirmo mi correo desde el enlace que me llega")
+def paso_confirmar_correo(context):
+    token = context.client.correo.token("verificar")
+    assert token, "no ha llegado ningún correo con enlace de confirmación"
+    context.response = context.client.post("/auth/verificar", json={"token": token})
+    assert context.response.status_code == 200, context.response.text
+
+
+@when('pido recuperar la contraseña de "{email}"')
+def paso_pedir_recuperacion(context, email):
+    context.response = context.client.post("/auth/recuperar", json={"email": email})
+    assert context.response.status_code == 202, context.response.text
+
+
+@when('elijo la contraseña nueva "{password}" desde el enlace que me llega')
+def paso_restablecer(context, password):
+    token = context.client.correo.token("restablecer")
+    assert token, "no ha llegado ningún correo con enlace de recuperación"
+    context.response = context.client.post(
+        "/auth/restablecer", json={"token": token, "password": password}
+    )
+    assert context.response.status_code == 200, context.response.text
 
 
 @when('inicio sesión con email "{email}" y contraseña "{password}"')

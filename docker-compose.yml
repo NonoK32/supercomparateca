@@ -52,6 +52,11 @@ services:
       # verifica nada y el registro funciona sin widget.
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      # Correo transaccional. Vacío en desarrollo: los mensajes van al log del
+      # servicio en vez de enviarse, así el flujo se puede probar sin cuenta.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      CORREO_REMITENTE: ${CORREO_REMITENTE:-SuperComparateca <no-reply@example.com>}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8090}
     ports:
       - "8000:8000"
     depends_on:

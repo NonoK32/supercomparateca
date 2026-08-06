@@ -77,6 +77,10 @@ function mostrarAuth() {
   // Sin pestañas no hay barra fija al pie, así que <main> no debe reservar su
   // hueco (styles.css, body.sin-sesion).
   document.body.classList.add("sin-sesion");
+  // Se vuelve al par de tarjetas por defecto: si se salió estando en
+  // «recuperar», al cerrar sesión hay que ver el login otra vez.
+  mostrarTarjetasAuth(["card-login", "card-registro"]);
+  $("aviso-sin-verificar").classList.add("hidden");
   // Aquí y no en el arranque: a esta vista se llega también al cerrar sesión y
   // al caducar el token (api() responde al 401 con cerrarSesion()). Si el
   // widget se montara solo al arrancar, quien entrase con sesión y la perdiera
@@ -97,8 +101,21 @@ async function login(email, password) {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: form,
   });
+  if (resp.status === 403) {
+    // Credenciales buenas pero correo sin confirmar: se ofrece el reenvío en
+    // vez de dejar a la persona atascada sin saber qué hacer.
+    $("aviso-sin-verificar").classList.remove("hidden");
+    const data = await resp.json().catch(() => ({}));
+    throw new Error(textoError(data.detail, resp.status));
+  }
   if (!resp.ok) throw new Error("Email o contraseña incorrectos");
-  token = (await resp.json()).access_token;
+  iniciarSesionCon((await resp.json()).access_token);
+}
+
+// Punto único donde se guarda la sesión: lo usan el login, la confirmación de
+// correo y el restablecimiento de contraseña, que también devuelven token.
+function iniciarSesionCon(nuevoToken) {
+  token = nuevoToken;
   localStorage.setItem("token", token);
   mostrarApp();
 }
@@ -111,6 +128,103 @@ $("form-login").addEventListener("submit", async (e) => {
     mensaje(err.message, true);
   }
 });
+
+// ---- Recuperación de contraseña y confirmación de correo ----
+// Token del enlace de restablecimiento, si se ha llegado desde el correo.
+let tokenRestablecer = null;
+
+// Alterna entre las tarjetas de la pantalla de acceso. `#vista-auth` es una
+// rejilla de dos columnas en escritorio: mostrar recuperar/restablecer a la
+// vez que login y registro dejaría cuatro tarjetas compitiendo.
+function mostrarTarjetasAuth(cuales) {
+  for (const id of ["card-login", "card-registro", "card-recuperar", "card-restablecer"]) {
+    $(id).classList.toggle("hidden", !cuales.includes(id));
+  }
+}
+
+$("btn-olvide").addEventListener("click", () => {
+  $("rec-email").value = $("login-email").value;
+  mostrarTarjetasAuth(["card-recuperar"]);
+  $("rec-email").focus();
+});
+
+// Salida de las dos pantallas intermedias. Sin esto, un enlace caducado deja
+// atrapado en el formulario de restablecer sin más opción que recargar.
+for (const id of ["btn-rec-volver", "btn-res-volver"]) {
+  $(id).addEventListener("click", () => {
+    mostrarTarjetasAuth(["card-login", "card-registro"]);
+  });
+}
+
+$("form-recuperar").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("/auth/recuperar", { method: "POST", json: { email: $("rec-email").value } });
+  } catch (err) {
+    mensaje(err.message, true);
+    return;
+  }
+  // El mensaje es deliberadamente ambiguo: confirmar que la dirección existe
+  // convertiría esto en un comprobador de quién tiene cuenta.
+  mensaje("Si esa dirección tiene cuenta, te hemos enviado un enlace");
+  mostrarTarjetasAuth(["card-login", "card-registro"]);
+});
+
+$("btn-reenviar").addEventListener("click", async () => {
+  try {
+    await api("/auth/reenviar-verificacion", {
+      method: "POST",
+      json: { email: $("login-email").value },
+    });
+    mensaje("Si tu cuenta está sin confirmar, te hemos escrito");
+  } catch (err) {
+    mensaje(err.message, true);
+  }
+});
+
+$("form-restablecer").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const data = await api("/auth/restablecer", {
+      method: "POST",
+      json: { token: tokenRestablecer, password: $("res-password").value },
+    });
+    mensaje("Contraseña cambiada");
+    iniciarSesionCon(data.access_token);
+    mostrarTarjetasAuth(["card-login", "card-registro"]);
+  } catch (err) {
+    mensaje(err.message, true);
+  }
+});
+
+// Los enlaces del correo llegan como ?verificar=… o ?restablecer=…
+async function procesarEnlaceDeCorreo() {
+  const params = new URLSearchParams(location.search);
+  const verificar = params.get("verificar");
+  const restablecer = params.get("restablecer");
+  if (!verificar && !restablecer) return false;
+
+  // El token sale de la barra de direcciones cuanto antes: si no, queda en el
+  // historial y en cualquier captura de pantalla.
+  history.replaceState(null, "", location.pathname);
+
+  if (restablecer) {
+    tokenRestablecer = restablecer;
+    mostrarTarjetasAuth(["card-restablecer"]);
+    $("res-password").focus();
+    return true;
+  }
+
+  try {
+    const data = await api("/auth/verificar", { method: "POST", json: { token: verificar } });
+    mensaje("Correo confirmado, ya estás dentro");
+    iniciarSesionCon(data.access_token);
+    return true;
+  } catch (err) {
+    mensaje(err.message, true);
+    return false;
+  }
+}
 
 // ---- Anti-bot (Turnstile) ----
 // La clave de sitio la sirve la API en /auth/config, no va incrustada en el
@@ -712,8 +826,11 @@ $("form-baja").addEventListener("submit", async (e) => {
 });
 
 // ---- Arranque ----
-if (token) {
-  mostrarApp();
-} else {
-  mostrarAuth();
-}
+// Los enlaces del correo mandan sobre la sesión guardada: quien acaba de
+// pulsar «confirmar mi correo» espera que pase eso, no que se le cuele la
+// sesión anterior.
+procesarEnlaceDeCorreo().then((gestionado) => {
+  if (gestionado) return;
+  if (token) mostrarApp();
+  else mostrarAuth();
+});

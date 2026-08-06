@@ -2,6 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -25,6 +26,11 @@ class Usuario(Base):
     # "usuario" | "admin". Solo admin puede modificar/borrar los datos globales
     # (productos, supermercados) de los que dependen todos los demás.
     rol: Mapped[str] = mapped_column(String(20), default="usuario")
+    # Sin verificar no se puede iniciar sesión: es lo que hace que la
+    # verificación signifique algo y garantiza que toda cuenta tenga un correo
+    # real al que mandar la recuperación de contraseña. Los usuarios que ya
+    # existían cuando se añadió esto quedaron verificados en la migración.
+    email_verificado: Mapped[bool] = mapped_column(Boolean, default=False)
     fecha_registro: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -31,6 +31,10 @@ def test_registro_password_corta_da_422(api_client):
 
 def test_login_correcto_devuelve_token(api_client):
     api_client.post("/auth/registro", json=CREDS)
+    # Sin confirmar el correo no se entra (ver test_verificacion_email.py).
+    api_client.post(
+        "/auth/verificar", json={"token": api_client.correo.token("verificar")}
+    )
     resp = api_client.post(
         "/auth/login", data={"username": CREDS["email"], "password": CREDS["password"]}
     )

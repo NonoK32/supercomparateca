@@ -4,12 +4,34 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import models, schemas, seguridad
+from .. import correo, models, schemas, seguridad
 from ..config import settings
 from ..database import get_db
 from ..turnstile import TurnstileClient, get_turnstile_client
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _enlace(ruta: str, token: str) -> str:
+    return f"{settings.frontend_url.rstrip('/')}/?{ruta}={token}"
+
+
+def _enviar_verificacion(cliente, usuario: models.Usuario) -> None:
+    token = seguridad.crear_token_correo(
+        usuario,
+        seguridad.PROPOSITO_VERIFICACION,
+        settings.verificacion_expira_horas * 60,
+    )
+    url = _enlace("verificar", token)
+    cliente.enviar(
+        usuario.email,
+        "Confirma tu correo en SuperComparateca",
+        f"""<p>Hola {usuario.nombre}:</p>
+<p>Confirma esta dirección para poder entrar en SuperComparateca.</p>
+<p><a href="{url}">Confirmar mi correo</a></p>
+<p>El enlace caduca en {settings.verificacion_expira_horas} horas.
+Si no has creado ninguna cuenta, ignora este mensaje.</p>""",
+    )
 
 
 @router.get("/config", response_model=schemas.AuthConfig)
@@ -20,7 +42,10 @@ def config_publica():
     el HTML: el frontend es estático y así cambiarla no obliga a reconstruir la
     imagen. Si viene vacía, el frontend no monta el widget.
     """
-    return schemas.AuthConfig(turnstile_site_key=settings.turnstile_site_key)
+    return schemas.AuthConfig(
+        turnstile_site_key=settings.turnstile_site_key,
+        correo_activo=bool(settings.resend_api_key),
+    )
 
 
 @router.post(
@@ -31,6 +56,7 @@ def registro(
     request: Request,
     db: Session = Depends(get_db),
     turnstile: TurnstileClient = Depends(get_turnstile_client),
+    cliente_correo=Depends(correo.get_cliente_correo),
 ):
     # Filtro anti-bot antes de tocar la base de datos: si no hay clave secreta
     # configurada no se verifica nada (desarrollo y tests).
@@ -69,6 +95,21 @@ def registro(
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe un usuario con ese email")
     db.refresh(usuario)
+
+    # Si el correo no sale, la cuenta queda inservible: sin verificar no se
+    # puede entrar, y sin mensaje no hay forma de verificar. Se deshace el alta
+    # para que la persona pueda reintentarlo con el mismo email en vez de
+    # quedarse con una cuenta muerta y un 409 cada vez que lo intente.
+    try:
+        _enviar_verificacion(cliente_correo, usuario)
+    except correo.ErrorCorreo as exc:
+        db.delete(usuario)
+        db.commit()
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "No hemos podido enviarte el correo de confirmación. Inténtalo dentro de un rato.",
+        ) from exc
+
     return usuario
 
 
@@ -88,6 +129,114 @@ def login(
             "Email o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # La comprobación va DESPUÉS de la contraseña: si fuera antes, cualquiera
+    # podría averiguar qué emails están registrados probando a entrar.
+    if not usuario.email_verificado:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Todavía no has confirmado tu correo. Revisa tu bandeja de entrada.",
+        )
+    return schemas.Token(access_token=seguridad.crear_token(usuario.id))
+
+
+@router.post("/verificar", response_model=schemas.Token)
+def verificar_email(
+    payload: schemas.VerificarEmail, db: Session = Depends(get_db)
+):
+    """Confirma el correo desde el enlace del mensaje.
+
+    Devuelve un token de sesión: quien acaba de demostrar que controla la
+    dirección ya puede entrar, y obligarle a teclear la contraseña otra vez
+    justo después no aporta seguridad, solo fricción.
+    """
+    usuario = seguridad.leer_token_correo(
+        payload.token, seguridad.PROPOSITO_VERIFICACION, db
+    )
+    if usuario is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "El enlace no es válido o ha caducado. Pide uno nuevo.",
+        )
+    if not usuario.email_verificado:
+        usuario.email_verificado = True
+        db.commit()
+    return schemas.Token(access_token=seguridad.crear_token(usuario.id))
+
+
+@router.post("/reenviar-verificacion", status_code=status.HTTP_202_ACCEPTED)
+def reenviar_verificacion(
+    payload: schemas.SolicitarCorreo,
+    db: Session = Depends(get_db),
+    cliente_correo=Depends(correo.get_cliente_correo),
+):
+    """Reenvía el correo de confirmación.
+
+    Responde 202 pase lo que pase. Distinguir "no existe" de "ya verificado"
+    convertiría esto en un comprobador de qué direcciones tienen cuenta.
+    """
+    usuario = db.scalar(
+        select(models.Usuario).where(models.Usuario.email == payload.email)
+    )
+    if usuario is not None and not usuario.email_verificado:
+        try:
+            _enviar_verificacion(cliente_correo, usuario)
+        except correo.ErrorCorreo:
+            # No se filtra al cliente por lo mismo de arriba; queda en el log
+            # del servicio, que es donde se mira cuando alguien se queja.
+            pass
+    return {"detail": "Si esa dirección tiene una cuenta sin confirmar, te hemos escrito."}
+
+
+@router.post("/recuperar", status_code=status.HTTP_202_ACCEPTED)
+def recuperar_password(
+    payload: schemas.SolicitarCorreo,
+    db: Session = Depends(get_db),
+    cliente_correo=Depends(correo.get_cliente_correo),
+):
+    """Envía el enlace para restablecer la contraseña. Siempre responde 202."""
+    usuario = db.scalar(
+        select(models.Usuario).where(models.Usuario.email == payload.email)
+    )
+    if usuario is not None:
+        token = seguridad.crear_token_correo(
+            usuario, seguridad.PROPOSITO_RESET, settings.reset_expira_minutos
+        )
+        url = _enlace("restablecer", token)
+        try:
+            cliente_correo.enviar(
+                usuario.email,
+                "Restablece tu contraseña de SuperComparateca",
+                f"""<p>Hola {usuario.nombre}:</p>
+<p>Has pedido cambiar tu contraseña. Si no has sido tú, ignora este mensaje:
+tu contraseña actual sigue siendo válida.</p>
+<p><a href="{url}">Elegir una contraseña nueva</a></p>
+<p>El enlace caduca en {settings.reset_expira_minutos} minutos y solo se puede
+usar una vez.</p>""",
+            )
+        except correo.ErrorCorreo:
+            pass
+    return {"detail": "Si esa dirección tiene una cuenta, te hemos enviado un enlace."}
+
+
+@router.post("/restablecer", response_model=schemas.Token)
+def restablecer_password(
+    payload: schemas.RestablecerPassword, db: Session = Depends(get_db)
+):
+    """Fija la contraseña nueva a partir del enlace del correo."""
+    usuario = seguridad.leer_token_correo(
+        payload.token, seguridad.PROPOSITO_RESET, db
+    )
+    if usuario is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "El enlace no es válido, ya se ha usado o ha caducado. Pide uno nuevo.",
+        )
+    usuario.password_hash = seguridad.hash_password(payload.password)
+    # Quien recupera la contraseña por correo ha demostrado que controla la
+    # dirección, así que de paso queda verificado: si no, una cuenta sin
+    # confirmar seguiría sin poder entrar después de recuperarla.
+    usuario.email_verificado = True
+    db.commit()
     return schemas.Token(access_token=seguridad.crear_token(usuario.id))
 
 
