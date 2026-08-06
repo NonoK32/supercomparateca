@@ -459,6 +459,37 @@ esto**: Traefik pasaría a ver las IPs de Cloudflare y el límite se aplicaría 
 edge en vez de por visitante. Haría falta `forwardedHeaders.trustedIPs` con los
 rangos de CF.
 
+## Comprobar que lo desplegado funciona (smoke test)
+
+`healthcheck.sh` contesta *"está vivo"*. `smoke.sh` contesta *"hace lo que tiene
+que hacer"*, que no es lo mismo: el 2026-08-06 el registro estuvo abierto a bots
+con los cinco contenedores en verde y el healthcheck dando OK.
+
+`deploy.sh` ya lo ejecuta solo al final, y **falla el despliegue si algo no
+cuadra**. Para lanzarlo a mano:
+
+```bash
+cd /opt/supercomparateca && sudo ./scripts/smoke.sh prod
+sudo ./scripts/smoke.sh prod --limite   # incluye la prueba del rate limit
+```
+
+Requiere **`SMOKE_EMAIL` en el `.env`**: el email de una cuenta **que ya
+exista** (la tuya vale). Con él, la sonda del anti-bot no crea ningún usuario,
+porque el `api` verifica Turnstile *antes* de mirar la base de datos:
+
+| Respuesta a `POST /api/auth/registro` con ese email | Significa |
+|---|---|
+| `400` | Turnstile está activo ✅ |
+| `409` | «ya existe ese email» → **no se verificó nada: el registro está abierto** ❌ |
+| `201` | `SMOKE_EMAIL` no existía *y* además no hay anti-bot ❌ |
+
+Si `SMOKE_EMAIL` falta, el smoke test **falla a propósito** en vez de pasar sin
+comprobar nada: un chequeo que se salta en silencio es el problema que este
+script viene a resolver.
+
+La prueba del rate limit va detrás de `--limite` porque gasta tu propia cuota
+durante un minuto: interesa tras un despliegue, molesta en un cron.
+
 ## Qué viene después
 
 1. **13.3 — ensayo con el staging de Let's Encrypt.** Diez minutos de trabajo
