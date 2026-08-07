@@ -42,7 +42,17 @@ class CorreoResend:
         try:
             resp = httpx.post(
                 API_URL,
-                headers={"Authorization": f"Bearer {self._api_key}"},
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    # Identificarse en vez de ir como "python-httpx/…". La API
+                    # de Resend está tras Cloudflare, que bloquea por firma de
+                    # cliente: comprobado el 2026-08-06 que `Python-urllib/3.10`
+                    # se lleva un 403 con "error code: 1010" mientras que httpx
+                    # pasa. Hoy no hace falta, pero esa regla no la controlamos
+                    # y un nombre propio también ayuda si hay que rastrear
+                    # nuestras peticiones en el panel de Resend.
+                    "User-Agent": "SuperComparateca/1.0 (+https://supercomparateca.com)",
+                },
                 json={
                     "from": self._remitente,
                     "to": [destinatario],
