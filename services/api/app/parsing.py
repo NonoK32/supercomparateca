@@ -12,6 +12,14 @@ from decimal import Decimal
 # Precio: 1 a 4 dígitos, coma o punto decimal, exactamente 2 decimales.
 _PRECIO = re.compile(r"(?<!\d)(\d{1,4})[.,](\d{2})(?!\d)")
 
+# Desglose de un producto pesado: "0,532 kg x 2,49 EUR/kg". Lo que identifica a
+# la línea es el precio POR UNIDAD —la barra—, no el peso: un producto puede
+# llamarse "AGUA 1,5 L" pero ninguno lleva "€/kg" en el nombre.
+_UNITARIO = re.compile(
+    r"\d+[.,]\d+\s*(?:eur|€)?\s*/\s*(?:kg|gr|g|lt|l|ml|uds?|u)\b",
+    re.IGNORECASE,
+)
+
 # Palabras de líneas de resumen del ticket que no son productos. Se comparan por
 # palabra completa (no subcadena) para no descartar productos como "ACEITE DE
 # OLIVA" (que contiene "IVA").
@@ -28,6 +36,10 @@ _IGNORAR = frozenset(
     }
 )
 
+# Palabras de verdad de una descripción: 3+ letras seguidas. Sirve para
+# distinguir un nombre de producto de una fila del resumen de impuestos.
+_PALABRA = re.compile(r"[^\W\d_]{3,}", re.UNICODE)
+
 
 @dataclass
 class LineaParseada:
@@ -35,17 +47,64 @@ class LineaParseada:
     precio_total: Decimal
 
 
+def _palabras(descripcion: str) -> set[str]:
+    """Palabras en mayúsculas y sin puntuación pegada.
+
+    El OCR ensucia los bordes ("TOTAL)", "*IVA."), así que comparar los trozos
+    tal cual dejaba pasar justo las líneas que hay que descartar.
+    """
+    return {re.sub(r"[^0-9A-ZÁÉÍÓÚÜÑ]", "", p) for p in descripcion.upper().split()}
+
+
+def _ultimo_precio(fragmento: str) -> Decimal | None:
+    precios = list(_PRECIO.finditer(fragmento))
+    if not precios:
+        return None
+    return Decimal(f"{precios[-1].group(1)}.{precios[-1].group(2)}")
+
+
+def _es_tramo_de_impuestos(descripcion: str) -> bool:
+    """Fila del resumen de impuestos del pie: "A 21%", "B 10%", "21 %".
+
+    Llevan porcentaje y, como mucho, la letra del tipo impositivo. Basta con que
+    quede una palabra de verdad (3+ letras) para considerarlo un producto, así
+    que "YOGUR 0% MG" se salva.
+    """
+    return "%" in descripcion and not _PALABRA.search(descripcion)
+
+
 def parsear_lineas(texto: str) -> list[LineaParseada]:
     lineas: list[LineaParseada] = []
+    # Nombre de la línea anterior cuando venía sin importe. Los productos
+    # pesados a veces se parten en dos: el nombre arriba y el total en la línea
+    # del desglose por kilo.
+    pendiente: str | None = None
+
     for cruda in texto.splitlines():
         cruda = cruda.strip()
         if not cruda:
             continue
 
-        precios = list(_PRECIO.finditer(cruda))
-        if not precios:
+        unitario = _UNITARIO.search(cruda)
+        if unitario:
+            # Es el desglose del producto anterior, nunca un producto. Si detrás
+            # del precio por unidad viene otro importe, ese es el total de la
+            # compra y el nombre está en la línea de arriba.
+            total = _ultimo_precio(cruda[unitario.end() :])
+            if total is not None and pendiente is not None:
+                lineas.append(LineaParseada(texto_original=pendiente, precio_total=total))
+            pendiente = None
             continue
 
+        precios = list(_PRECIO.finditer(cruda))
+        if not precios:
+            # Sin importe puede ser el nombre de un producto pesado (el total
+            # llegará en la siguiente línea) o ruido de cabecera; se recuerda
+            # solo si parece un nombre.
+            pendiente = cruda if any(c.isalpha() for c in cruda) else None
+            continue
+
+        pendiente = None
         ultimo = precios[-1]
         descripcion = cruda[: ultimo.start()].strip(" .-\t")
 
@@ -53,7 +112,10 @@ def parsear_lineas(texto: str) -> list[LineaParseada]:
         if not any(c.isalpha() for c in descripcion):
             continue
         # Descarta líneas de resumen (TOTAL, IVA, etc.), por palabra completa.
-        if _IGNORAR & set(descripcion.upper().split()):
+        if _IGNORAR & _palabras(descripcion):
+            continue
+        # Descarta el resumen de impuestos del pie ("A 21% 1,00 0,21 1,21").
+        if _es_tramo_de_impuestos(descripcion):
             continue
 
         precio = Decimal(f"{ultimo.group(1)}.{ultimo.group(2)}")
