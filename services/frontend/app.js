@@ -83,15 +83,10 @@ function mostrarAuth() {
   // Sin pestañas no hay barra fija al pie, así que <main> no debe reservar su
   // hueco (styles.css, body.sin-sesion).
   document.body.classList.add("sin-sesion");
-  // Se vuelve al par de tarjetas por defecto: si se salió estando en
-  // «recuperar», al cerrar sesión hay que ver el login otra vez.
-  mostrarTarjetasAuth(["card-login", "card-registro"]);
+  // Se vuelve al login: si se salió estando en «recuperar» o en el registro,
+  // al cerrar sesión hay que ver otra vez la puerta de entrada.
+  mostrarTarjetasAuth(["card-login"]);
   $("aviso-sin-verificar").classList.add("hidden");
-  // Aquí y no en el arranque: a esta vista se llega también al cerrar sesión y
-  // al caducar el token (api() responde al 401 con cerrarSesion()). Si el
-  // widget se montara solo al arrancar, quien entrase con sesión y la perdiera
-  // se quedaría con un registro que siempre da 400.
-  montarTurnstile();
 }
 
 function cerrarSesion() {
@@ -139,14 +134,35 @@ $("form-login").addEventListener("submit", async (e) => {
 // Token del enlace de restablecimiento, si se ha llegado desde el correo.
 let tokenRestablecer = null;
 
-// Alterna entre las tarjetas de la pantalla de acceso. `#vista-auth` es una
-// rejilla de dos columnas en escritorio: mostrar recuperar/restablecer a la
-// vez que login y registro dejaría cuatro tarjetas compitiendo.
+// Una sola tarjeta a la vez en la pantalla de acceso. Cambiar de operación
+// reimprime la hoja: es el único movimiento del sistema (y ya respeta
+// prefers-reduced-motion), y sin él el cambio de formulario pasa desapercibido,
+// porque entrar y registrarse se parecen mucho.
 function mostrarTarjetasAuth(cuales) {
   for (const id of ["card-login", "card-registro", "card-recuperar", "card-restablecer"]) {
-    $(id).classList.toggle("hidden", !cuales.includes(id));
+    const card = $(id);
+    const visible = cuales.includes(id);
+    card.classList.toggle("hidden", !visible);
+    if (!visible) continue;
+    card.classList.remove("imprimiendo");
+    void card.offsetWidth; // reinicia la animación
+    card.classList.add("imprimiendo");
   }
 }
+
+$("btn-ir-registro").addEventListener("click", () => {
+  mostrarTarjetasAuth(["card-registro"]);
+  // El widget anti-bot se monta al abrir el registro, no antes: Turnstile se
+  // dibuja sobre un contenedor que hasta ahora estaba oculto, y montarlo dentro
+  // de un `display:none` es pedirle que se pinte a ciegas.
+  montarTurnstile();
+  $("reg-nombre").focus();
+});
+
+$("btn-ir-login").addEventListener("click", () => {
+  mostrarTarjetasAuth(["card-login"]);
+  $("login-email").focus();
+});
 
 $("btn-olvide").addEventListener("click", () => {
   $("rec-email").value = $("login-email").value;
@@ -158,7 +174,7 @@ $("btn-olvide").addEventListener("click", () => {
 // atrapado en el formulario de restablecer sin más opción que recargar.
 for (const id of ["btn-rec-volver", "btn-res-volver"]) {
   $(id).addEventListener("click", () => {
-    mostrarTarjetasAuth(["card-login", "card-registro"]);
+    mostrarTarjetasAuth(["card-login"]);
   });
 }
 
@@ -173,7 +189,7 @@ $("form-recuperar").addEventListener("submit", async (e) => {
   // El mensaje es deliberadamente ambiguo: confirmar que la dirección existe
   // convertiría esto en un comprobador de quién tiene cuenta.
   mensaje("Si esa dirección tiene cuenta, te hemos enviado un enlace");
-  mostrarTarjetasAuth(["card-login", "card-registro"]);
+  mostrarTarjetasAuth(["card-login"]);
 });
 
 $("btn-reenviar").addEventListener("click", async () => {
@@ -197,7 +213,7 @@ $("form-restablecer").addEventListener("submit", async (e) => {
     });
     mensaje("Contraseña cambiada");
     iniciarSesionCon(data.access_token);
-    mostrarTarjetasAuth(["card-login", "card-registro"]);
+    mostrarTarjetasAuth(["card-login"]);
   } catch (err) {
     mensaje(err.message, true);
   }
@@ -240,9 +256,9 @@ async function procesarEnlaceDeCorreo() {
 let turnstileMontado = false;
 
 async function montarTurnstile() {
-  // Un solo montaje por carga de página: mostrarAuth() puede llamarse varias
-  // veces y el widget ya montado sobrevive, porque cambiar de vista solo
-  // alterna clases y no toca el DOM del formulario.
+  // Un solo montaje por carga de página: se puede entrar y salir del registro
+  // varias veces y el widget ya montado sobrevive, porque cambiar de tarjeta
+  // solo alterna clases y no toca el DOM del formulario.
   if (turnstileMontado) return;
   turnstileMontado = true;
 
@@ -283,8 +299,10 @@ $("form-registro").addEventListener("submit", async (e) => {
         turnstile_token: window.turnstile ? window.turnstile.getResponse(cont) : undefined,
       },
     });
-    mensaje("Cuenta creada, ya puedes iniciar sesión");
+    mensaje("Cuenta creada: confirma tu correo y ya puedes entrar");
     $("form-registro").reset();
+    // De vuelta a la puerta de entrada, que es lo siguiente que toca.
+    mostrarTarjetasAuth(["card-login"]);
   } catch (err) {
     mensaje(err.message, true);
   } finally {
@@ -342,13 +360,29 @@ const SUPER_NUEVO = "nuevo";
 // La foto a la espera de que el usuario conteste lo que el OCR no supo leer.
 let fotoPendiente = null;
 
+function rotularZona(archivo) {
+  $("zona-titulo").textContent = archivo ? "Ticket listo" : "Pegar aquí el ticket";
+  $("zona-pista").textContent = archivo
+    ? `${archivo.name} · toca para cambiarla`
+    : "Toca para elegir la foto · o arrástrala";
+}
+
 function elegirFoto(archivo) {
   if (!archivo) return;
   const previa = $("foto-previa");
   previa.src = URL.createObjectURL(archivo);
   previa.classList.remove("hidden");
-  $("zona-titulo").textContent = "Ticket listo";
-  $("zona-pista").textContent = `${archivo.name} · toca para cambiarla`;
+  rotularZona(archivo);
+}
+
+// El OCR tarda varios segundos con la pantalla quieta: sin decir nada, eso se
+// lee como que la página se ha colgado. Se dice qué está pasando y se deja de
+// admitir otra foto mientras tanto.
+function marcarLeyendo(activo) {
+  $("zona-foto").classList.toggle("leyendo", activo);
+  if (!activo) return;
+  $("zona-titulo").textContent = "Leyendo el ticket…";
+  $("zona-pista").textContent = "Puede tardar unos segundos";
 }
 
 function olvidarFoto() {
@@ -358,8 +392,7 @@ function olvidarFoto() {
   URL.revokeObjectURL(previa.src);
   previa.src = "";
   previa.classList.add("hidden");
-  $("zona-titulo").textContent = "Pegar aquí el ticket";
-  $("zona-pista").textContent = "Toca para elegir la foto · o arrástrala";
+  rotularZona(null);
 }
 
 $("ticket-imagen").addEventListener("change", (e) => elegirFoto(e.target.files[0]));
@@ -407,7 +440,8 @@ async function procesarTicket(archivo, datos, btn) {
   }
   const textoBtn = btn.textContent;
   btn.disabled = true;
-  btn.textContent = "Procesando…";
+  btn.textContent = "Leyendo…";
+  marcarLeyendo(true);
   try {
     const ticket = await api("/tickets", { method: "POST", form });
     olvidarFoto();
@@ -428,6 +462,11 @@ async function procesarTicket(archivo, datos, btn) {
   } finally {
     btn.disabled = false;
     btn.textContent = textoBtn;
+    marcarLeyendo(false);
+    // Si la foto sigue puesta (fallo, o falta un dato que preguntar), el
+    // recuadro vuelve a decir cuál es; si se procesó bien, olvidarFoto() ya lo
+    // ha dejado vacío.
+    rotularZona($("ticket-imagen").files[0] || null);
   }
 }
 

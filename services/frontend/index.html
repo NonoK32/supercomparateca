@@ -38,11 +38,17 @@
       <div class="card" id="card-login">
         <h2>Entrar</h2>
         <form id="form-login">
-          <input type="email" id="login-email" placeholder="email" required>
-          <input type="password" id="login-password" placeholder="contraseña" required>
+          <input type="email" id="login-email" placeholder="email"
+                 autocomplete="email" required>
+          <input type="password" id="login-password" placeholder="contraseña"
+                 autocomplete="current-password" required>
           <button type="submit">Iniciar sesión</button>
         </form>
         <p><button type="button" id="btn-olvide" class="enlace">¿Has olvidado tu contraseña?</button></p>
+
+        <!-- Hueco para el acceso con Google, cuando lo haya: aquí va una
+             `.separacion-o` y debajo el botón. Sin backend que lo atienda no se
+             pinta, que un botón que no hace nada es peor que no tenerlo. -->
 
         <!-- Aparece solo si el login falla por falta de confirmación. -->
         <div id="aviso-sin-verificar" class="hidden">
@@ -50,19 +56,34 @@
           <p class="muted">¿No te ha llegado el correo de confirmación?</p>
           <button type="button" id="btn-reenviar" class="sec">Reenviármelo</button>
         </div>
+
+        <!-- El pie del recibo: donde un ticket imprime su mensaje al cliente. -->
+        <hr class="raya">
+        <p class="pie-recibo">
+          ¿No tienes cuenta?
+          <button type="button" id="btn-ir-registro" class="enlace">Regístrate</button>
+        </p>
       </div>
 
-      <div class="card" id="card-registro">
+      <div class="card hidden" id="card-registro">
         <h2>Crear cuenta</h2>
         <form id="form-registro">
-          <input type="text" id="reg-nombre" placeholder="nombre" required>
-          <input type="email" id="reg-email" placeholder="email" required>
-          <input type="password" id="reg-password" placeholder="contraseña (mín. 8)" required minlength="8">
+          <input type="text" id="reg-nombre" placeholder="nombre"
+                 autocomplete="name" required>
+          <input type="email" id="reg-email" placeholder="email"
+                 autocomplete="email" required>
+          <input type="password" id="reg-password" placeholder="contraseña (mín. 8)"
+                 autocomplete="new-password" required minlength="8">
           <!-- Widget anti-bot. Queda vacío si el servidor no tiene configurada
                la clave de sitio (desarrollo): ver montarTurnstile() en app.js. -->
           <div id="turnstile-registro"></div>
-          <button type="submit">Registrarme</button>
+          <button type="submit">Crear mi cuenta</button>
         </form>
+        <hr class="raya">
+        <p class="pie-recibo">
+          ¿Ya tienes cuenta?
+          <button type="button" id="btn-ir-login" class="enlace">Entrar</button>
+        </p>
       </div>
 
       <!-- Pedir el enlace de recuperación. Sustituye a las dos tarjetas de

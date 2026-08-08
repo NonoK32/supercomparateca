@@ -369,6 +369,7 @@ input::placeholder { color: var(--tinta-media); }
    <input type=file> del navegador, que es lo unico de la pantalla que no
    pertenecia a este material. */
 .zona-foto {
+  position: relative;
   display: grid;
   justify-items: center;
   gap: var(--sp-2);
@@ -378,6 +379,7 @@ input::placeholder { color: var(--tinta-media); }
   background: var(--papel-hueco);
   text-align: center;
   cursor: pointer;
+  overflow: hidden;
 }
 .zona-foto:hover { border-color: var(--tinta-media); }
 /* Al arrastrar encima, el recuadro se cierra sobre el papel. */
@@ -413,6 +415,16 @@ input::placeholder { color: var(--tinta-media); }
   max-height: 180px;
   max-width: 100%;
   border: 1px solid var(--tinta-tenue);
+}
+
+/* Mientras el OCR trabaja. Son varios segundos con la pantalla quieta, los
+   suficientes para pensar que se ha colgado. El recuadro se cierra sobre el
+   papel y deja de ser pulsable: la foto ya esta dentro de la maquina. */
+.zona-foto.leyendo {
+  pointer-events: none;
+  cursor: progress;
+  border-style: solid;
+  border-color: var(--tinta-media);
 }
 
 input:focus-visible,
@@ -587,7 +599,39 @@ tr:last-child td { border-bottom: none; }
    6. Pantallas
    ============================================================ */
 
-#vista-auth { display: grid; gap: var(--sp-4); }
+/* -- Acceso --
+   Una sola hoja cada vez, centrada y estrecha como un resguardo de caja.
+   Antes entrar y registrarse se imprimian a la vez, uno al lado del otro: dos
+   formularios casi identicos compitiendo obligan a leerlos para saber cual es
+   el tuyo, cuando el 99% de las visitas vienen a lo mismo, a entrar. */
+#vista-auth {
+  display: grid;
+  gap: var(--sp-4);
+  max-width: 24rem;
+  margin-inline: auto;
+  width: 100%;
+}
+
+/* Pie del recibo: la linea que un ticket reserva para hablarle al cliente
+   ("gracias por su compra"). Aqui es el paso a la otra operacion, y por eso va
+   al final, en voz baja y en la tipografia de la maquina. */
+.pie-recibo {
+  margin: 0;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  color: var(--tinta-media);
+}
+.pie-recibo .enlace {
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  color: var(--tinta);
+  /* Objetivo tactil de 44 px sin partir en dos la frase, que se lee seguida:
+     inline-flex mantiene el boton dentro del renglon y le da altura propia. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
 
 /* Sin sesion no hay pestanas, asi que el hueco reservado abajo sobra. */
 body.sin-sesion main { padding-bottom: var(--sp-6); }
@@ -794,8 +838,6 @@ body.sin-sesion main { padding-bottom: var(--sp-6); }
 
   #mensaje { bottom: var(--sp-5); }
 
-  #vista-auth { grid-template-columns: 1fr 1fr; align-items: start; }
-
   #tabla-lineas thead { display: table-header-group; }
   #tabla-lineas tr { display: table-row; padding: 0; }
   #tabla-lineas td {
@@ -823,5 +865,27 @@ body.sin-sesion main { padding-bottom: var(--sp-6); }
   @keyframes imprimir {
     from { transform: translateY(-8px); opacity: 0; }
     to   { transform: none; opacity: 1; }
+  }
+
+  /* La linea de lectura recorriendo el ticket. No es un spinner: es lo que
+     literalmente esta ocurriendo, alguien esta leyendo ese papel de arriba
+     abajo. Va en bucle y sin porcentaje porque el servidor no informa del
+     avance, y una barra de progreso inventada seria mentira. */
+  .zona-foto.leyendo::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    background: var(--tinta);
+    opacity: .65;
+    animation: leer 1.6s linear infinite;
+  }
+  /* Con `top` en porcentaje y no con transform, para no tener que medir el
+     recuadro desde JS: 100% es su alto, sea cual sea la foto. */
+  @keyframes leer {
+    from { top: 0; }
+    to   { top: 100%; }
   }
 }
