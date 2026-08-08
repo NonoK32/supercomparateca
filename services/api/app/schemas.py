@@ -25,6 +25,9 @@ class AuthConfig(BaseModel):
     # detecte tras cada despliegue, en vez de descubrirlo por un usuario que no
     # recibe nada. No revela ningún secreto: solo si el servicio está en pie.
     correo_activo: bool
+    # Id de cliente OAuth de Google. Público por diseño (ver config.py). Vacío
+    # = el frontend no pinta el botón.
+    google_client_id: str = ""
 
 
 class SolicitarCorreo(BaseModel):
@@ -35,6 +38,12 @@ class SolicitarCorreo(BaseModel):
 
 class VerificarEmail(BaseModel):
     token: str
+
+
+class AccesoGoogle(BaseModel):
+    """El ID token que Google Identity Services entrega al navegador."""
+
+    credential: str
 
 
 class RestablecerPassword(BaseModel):

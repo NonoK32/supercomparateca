@@ -1,10 +1,12 @@
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import correo, models, schemas, seguridad
+from .. import correo, google_auth, models, schemas, seguridad
 from ..config import settings
 from ..database import get_db
 from ..turnstile import TurnstileClient, get_turnstile_client
@@ -54,7 +56,78 @@ def config_publica():
     return schemas.AuthConfig(
         turnstile_site_key=settings.turnstile_site_key,
         correo_activo=bool(settings.resend_api_key),
+        google_client_id=settings.google_client_id,
     )
+
+
+@router.post("/google", response_model=schemas.Token)
+def entrar_con_google(
+    payload: schemas.AccesoGoogle,
+    db: Session = Depends(get_db),
+    verificador: google_auth.VerificadorGoogle = Depends(
+        google_auth.get_verificador_google
+    ),
+):
+    """Entra con una cuenta de Google, dándola de alta si es la primera vez.
+
+    No hay Turnstile: el token lo firma Google tras su propio control de acceso,
+    que es mejor filtro que el nuestro. Tampoco hay correo de confirmación,
+    porque Google ya acredita la dirección; pedirla otra vez sería exigir dos
+    veces la misma prueba.
+
+    Si el email ya tiene cuenta, se entra en ella. Es deliberado: la dirección
+    es la identidad en esta app, y Google acaba de demostrar que es suya. Sin
+    esto, quien se registró con contraseña y luego pulsa el botón de Google se
+    encontraría con que no puede entrar en su propia cuenta.
+    """
+    if not verificador.activo:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "El acceso con Google no está disponible",
+        )
+
+    try:
+        identidad = verificador.verificar(payload.credential)
+    except google_auth.ErrorGoogle as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+
+    usuario = db.scalar(
+        select(models.Usuario).where(models.Usuario.email == identidad.email)
+    )
+
+    if usuario is None:
+        primero = db.scalar(select(models.Usuario.id).limit(1)) is None
+        usuario = models.Usuario(
+            nombre=identidad.nombre,
+            email=identidad.email,
+            # Contraseña aleatoria que nadie conoce, ni siquiera su dueño: en
+            # esta cuenta se entra por Google. Si algún día quiere una, la pide
+            # por «he olvidado mi contraseña», que es el mismo camino de
+            # siempre y ya está probado.
+            password_hash=seguridad.hash_password(secrets.token_urlsafe(32)),
+            rol="admin" if primero else "usuario",
+            email_verificado=True,
+        )
+        db.add(usuario)
+        try:
+            db.commit()
+        except IntegrityError:
+            # Dos pestañas a la vez con la misma cuenta nueva: la otra ganó.
+            db.rollback()
+            usuario = db.scalar(
+                select(models.Usuario).where(models.Usuario.email == identidad.email)
+            )
+            if usuario is None:
+                raise
+        else:
+            db.refresh(usuario)
+    elif not usuario.email_verificado:
+        # Se registró con contraseña, no llegó a confirmar y ahora entra con
+        # Google: la dirección queda acreditada igual.
+        usuario.email_verificado = True
+        db.commit()
+
+    return schemas.Token(access_token=seguridad.crear_token(usuario.id))
 
 
 @router.post(

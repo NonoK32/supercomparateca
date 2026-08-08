@@ -46,9 +46,14 @@
         </form>
         <p><button type="button" id="btn-olvide" class="enlace">¿Has olvidado tu contraseña?</button></p>
 
-        <!-- Hueco para el acceso con Google, cuando lo haya: aquí va una
-             `.separacion-o` y debajo el botón. Sin backend que lo atienda no se
-             pinta, que un botón que no hace nada es peor que no tenerlo. -->
+        <!-- Acceso con Google. Oculto hasta saber que el servidor lo tiene
+             configurado (GET /auth/config): un botón que no puede funcionar es
+             peor que no tenerlo. El botón lo dibuja el propio script de Google
+             dentro de #boton-google. -->
+        <div id="acceso-google" class="hidden">
+          <p class="separacion-o"><span>o</span></p>
+          <div id="boton-google"></div>
+        </div>
 
         <!-- Aparece solo si el login falla por falta de confirmación. -->
         <div id="aviso-sin-verificar" class="hidden">

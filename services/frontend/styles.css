@@ -612,6 +612,34 @@ tr:last-child td { border-bottom: none; }
   width: 100%;
 }
 
+/* La raya discontinua partida por un "o": el mismo separador del resto de la
+   hoja, abierto para dejar pasar la palabra. */
+.separacion-o {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0 var(--sp-3);
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  color: var(--tinta-media);
+}
+.separacion-o::before,
+.separacion-o::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed var(--tinta-tenue);
+}
+
+/* El boton de Google lo dibuja su propio script y trae su tipografia y su
+   marca: es requisito de Google y ademas es lo que la gente reconoce de un
+   vistazo. Aqui solo se centra. */
+#boton-google {
+  display: flex;
+  justify-content: center;
+}
+
 /* Pie del recibo: la linea que un ticket reserva para hablarle al cliente
    ("gracias por su compra"). Aqui es el paso a la otra operacion, y por eso va
    al final, en voz baja y en la tipografia de la maquina. */

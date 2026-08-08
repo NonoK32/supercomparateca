@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     turnstile_site_key: str = ""
     turnstile_secret_key: str = ""
 
+    # Acceso con Google. Es el id de cliente OAuth, que es público: viaja en el
+    # HTML de cualquier web que use Google Identity Services y el frontend lo
+    # pide en GET /auth/config. No hay secreto de cliente porque no usamos el
+    # flujo de código de autorización (ver google_auth.py). Vacío = desactivado,
+    # y entonces solo se entra con email y contraseña.
+    google_client_id: str = ""
+
     # Correo transaccional (Resend): verificación de email y recuperación de
     # contraseña. Sin `resend_api_key` no se envía nada y los mensajes van al
     # log (ver correo.py), que es lo cómodo en desarrollo.

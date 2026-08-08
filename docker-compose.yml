@@ -57,6 +57,9 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       CORREO_REMITENTE: ${CORREO_REMITENTE:-SuperComparateca <no-reply@example.com>}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8090}
+      # Acceso con Google. Vacío = el botón no se pinta y solo se entra con
+      # email y contraseña. No hay secreto de cliente: el id es público.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     ports:
       - "8000:8000"
     depends_on:

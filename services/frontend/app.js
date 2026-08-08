@@ -87,6 +87,9 @@ function mostrarAuth() {
   // al cerrar sesión hay que ver otra vez la puerta de entrada.
   mostrarTarjetasAuth(["card-login"]);
   $("aviso-sin-verificar").classList.add("hidden");
+  // Aquí y no solo en el arranque: a esta vista se llega también al cerrar
+  // sesión y al caducar el token. El montaje es idempotente.
+  montarGoogle();
 }
 
 function cerrarSesion() {
@@ -253,6 +256,74 @@ async function procesarEnlaceDeCorreo() {
 // HTML: el frontend es una imagen estática y así cambiarla no obliga a
 // reconstruirla. Si viene vacía (desarrollo), no se monta nada y el registro
 // funciona igual, porque el backend tampoco verifica.
+// La configuración pública (claves de sitio, si hay correo, si hay Google) se
+// pide una vez: la necesitan el widget anti-bot y el botón de Google, y no
+// cambia mientras la página está abierta.
+let promesaConfig = null;
+
+function configAuth() {
+  if (!promesaConfig) {
+    promesaConfig = api("/auth/config").catch((err) => {
+      // Un fallo puntual de red no debe dejar la página sin widget ni sin botón
+      // para siempre: se olvida la promesa y el siguiente intento repite.
+      promesaConfig = null;
+      throw err;
+    });
+  }
+  return promesaConfig;
+}
+
+// ---- Acceso con Google ----
+// Se usa el flujo de ID token de Google Identity Services: el navegador recibe
+// un token firmado y el api lo verifica. No hay redirección ni secreto de
+// cliente porque no pedimos acceso a nada de Google salvo la identidad.
+let googleMontado = false;
+
+async function montarGoogle() {
+  if (googleMontado) return;
+  let cfg;
+  try {
+    cfg = await configAuth();
+  } catch {
+    return; // Siempre queda entrar con email y contraseña.
+  }
+  if (!cfg.google_client_id) return;
+  googleMontado = true;
+
+  const script = document.createElement("script");
+  script.src = "https://accounts.google.com/gsi/client";
+  script.async = true;
+  script.defer = true;
+  script.onload = () => {
+    window.google.accounts.id.initialize({
+      client_id: cfg.google_client_id,
+      callback: async ({ credential }) => {
+        try {
+          const data = await api("/auth/google", {
+            method: "POST",
+            json: { credential },
+          });
+          iniciarSesionCon(data.access_token);
+        } catch (err) {
+          mensaje(err.message, true);
+        }
+      },
+    });
+    // El botón lo dibuja Google: su marca y su tipografía son requisito suyo,
+    // y son justo lo que la gente reconoce sin leer.
+    window.google.accounts.id.renderButton($("boton-google"), {
+      theme: "outline",
+      size: "large",
+      text: "signin_with",
+      shape: "rectangular",
+      locale: "es",
+      width: Math.min(400, $("card-login").clientWidth - 32 || 320),
+    });
+    $("acceso-google").classList.remove("hidden");
+  };
+  document.head.appendChild(script);
+}
+
 let turnstileMontado = false;
 
 async function montarTurnstile() {
@@ -264,7 +335,7 @@ async function montarTurnstile() {
 
   let cfg;
   try {
-    cfg = await api("/auth/config");
+    cfg = await configAuth();
   } catch {
     // Sin config no bloqueamos el formulario; el backend decide. Se libera la
     // guarda para que un fallo puntual de red no deje el widget sin montar

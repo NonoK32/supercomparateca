@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.correo import ErrorCorreo, get_cliente_correo
 from app.database import Base, activar_fk_sqlite, get_db
+from app.google_auth import ErrorGoogle, IdentidadGoogle, get_verificador_google
 from app.main import app
 from app.ocr import get_ocr_client
 
@@ -56,6 +57,30 @@ class FakeCorreo:
         return encontrado.group(1) if encontrado else None
 
 
+class FakeGoogle:
+    """Verificador de Google falso: ni red ni credenciales.
+
+    Por defecto está activo y acredita `identidad`; `fallar` simula un token que
+    Google no valida (caducado, de otra aplicación o con el correo sin
+    confirmar), que es el camino que no debe dejar entrar a nadie.
+    """
+
+    def __init__(self):
+        self.activo = True
+        self.fallar = False
+        self.identidad = IdentidadGoogle(email="ana@gmail.com", nombre="Ana")
+
+    def verificar(self, credencial):
+        if self.fallar:
+            raise ErrorGoogle("token no válido (simulado)")
+        return self.identidad
+
+
+@pytest.fixture
+def fake_google():
+    return FakeGoogle()
+
+
 @pytest.fixture
 def fake_ocr():
     return FakeOCR()
@@ -67,7 +92,7 @@ def fake_correo():
 
 
 @pytest.fixture
-def api_client(fake_ocr, fake_correo):
+def api_client(fake_ocr, fake_correo, fake_google):
     """Cliente base con BD SQLite en memoria (aislada por test) y OCR falso.
     Sin autenticar: útil para probar registro/login y respuestas 401."""
     engine = create_engine(
@@ -89,11 +114,13 @@ def api_client(fake_ocr, fake_correo):
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_ocr_client] = lambda: fake_ocr
     app.dependency_overrides[get_cliente_correo] = lambda: fake_correo
+    app.dependency_overrides[get_verificador_google] = lambda: fake_google
     # Sin context manager: no dispara el lifespan (que crearía la BD por defecto).
     cliente = TestClient(app)
     # El buzón viaja colgado del cliente para que los ayudantes lo alcancen sin
     # que cada test tenga que pasarlo a mano.
     cliente.correo = fake_correo
+    cliente.google = fake_google
     yield cliente
     app.dependency_overrides.clear()
 

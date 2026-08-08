@@ -540,6 +540,49 @@ devuelve 502 y se deshace solo. El smoke test lo comprueba en cada despliegue.
 > mensaje entero (con su enlace) se escribe en el log del `api`. Para probar el
 > flujo sin cuenta: `docker compose logs -f api` y busca `CORREO NO ENVIADO`.
 
+## Activar el acceso con Google
+
+Opcional: si no se configura, el botón no se pinta y se entra con email y
+contraseña como siempre. **No hay secreto que guardar**: usamos el flujo de ID
+token de Google Identity Services, así que solo hace falta el id de cliente,
+que es público.
+
+1. <https://console.cloud.google.com> → crea un proyecto (o usa uno).
+2. **APIs y servicios → Pantalla de consentimiento de OAuth**: tipo *Externo*,
+   nombre de la app, correo de contacto y el dominio. Mientras esté en modo
+   *Prueba* solo entran las cuentas que añadas como usuarios de prueba, así que
+   para abrirlo a cualquiera hay que **publicarla**.
+3. **Credenciales → Crear credenciales → ID de cliente de OAuth → Aplicación
+   web**. En *Orígenes autorizados de JavaScript*:
+
+   ```
+   https://supercomparateca.com
+   http://localhost:8090      (solo para desarrollo)
+   ```
+
+   **URI de redirección no hace falta**: el token lo recibe el propio
+   navegador, no hay vuelta por el servidor.
+
+4. En el `.env` del servidor y redesplegar:
+
+   ```bash
+   sudo nano /opt/supercomparateca/.env
+   # GOOGLE_CLIENT_ID=1234567890-xxxxx.apps.googleusercontent.com
+   cd /opt/supercomparateca && sudo ./scripts/deploy.sh prod
+   curl -s https://supercomparateca.com/api/auth/config
+   # -> {"turnstile_site_key":"0x...","correo_activo":true,"google_client_id":"1234...}
+   ```
+
+Si el botón no aparece, mira ese `google_client_id` en `/auth/config` antes que
+nada: vacío significa que la variable no ha llegado al contenedor (recuerda que
+el `api` lee el entorno **al arrancar**). Si aparece pero al pulsarlo Google se
+queja del origen, es que falta el dominio exacto —con su `https://` y sin barra
+final— en *Orígenes autorizados*.
+
+> Si algún día se añade una **CSP** al nginx del frontend, necesita
+> `accounts.google.com` en `script-src` y `frame-src`, igual que
+> `challenges.cloudflare.com` para Turnstile.
+
 ### Si alguien se queda sin poder entrar
 
 Los enlaces caducan: 24 h el de confirmación, 60 min el de recuperación. Ambos
