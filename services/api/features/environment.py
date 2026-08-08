@@ -36,8 +36,10 @@ class FakeCorreo:
     def activo(self) -> bool:
         return True
 
-    def enviar(self, destinatario, asunto, html):
-        self.enviados.append({"para": destinatario, "asunto": asunto, "html": html})
+    def enviar(self, destinatario, asunto, html, texto):
+        self.enviados.append(
+            {"para": destinatario, "asunto": asunto, "html": html, "texto": texto}
+        )
 
     def token(self, clave="verificar"):
         if not self.enviados:

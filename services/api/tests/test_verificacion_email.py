@@ -22,6 +22,16 @@ def test_al_registrarse_se_envia_un_correo_con_enlace(api_client):
     assert api_client.correo.token("verificar")
 
 
+def test_el_correo_lleva_las_dos_versiones(api_client):
+    # Solo-HTML puntúa peor en los filtros antispam, y el enlace tiene que estar
+    # en las dos versiones o el que lea el texto plano se queda sin poder entrar.
+    _registrar(api_client)
+    mensaje = api_client.correo.enviados[0]
+    assert "<a href=" in mensaje["html"]
+    assert "<" not in mensaje["texto"]
+    assert "verificar=" in mensaje["texto"]
+
+
 def test_sin_verificar_no_se_puede_entrar(api_client):
     _registrar(api_client)
     resp = _login(api_client)

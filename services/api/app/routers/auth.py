@@ -31,6 +31,15 @@ def _enviar_verificacion(cliente, usuario: models.Usuario) -> None:
 <p><a href="{url}">Confirmar mi correo</a></p>
 <p>El enlace caduca en {settings.verificacion_expira_horas} horas.
 Si no has creado ninguna cuenta, ignora este mensaje.</p>""",
+        f"""Hola {usuario.nombre}:
+
+Confirma esta dirección para poder entrar en SuperComparateca abriendo
+este enlace:
+
+{url}
+
+El enlace caduca en {settings.verificacion_expira_horas} horas.
+Si no has creado ninguna cuenta, ignora este mensaje.""",
     )
 
 
@@ -212,6 +221,17 @@ tu contraseña actual sigue siendo válida.</p>
 <p><a href="{url}">Elegir una contraseña nueva</a></p>
 <p>El enlace caduca en {settings.reset_expira_minutos} minutos y solo se puede
 usar una vez.</p>""",
+                f"""Hola {usuario.nombre}:
+
+Has pedido cambiar tu contraseña. Si no has sido tú, ignora este mensaje:
+tu contraseña actual sigue siendo válida.
+
+Elige una contraseña nueva abriendo este enlace:
+
+{url}
+
+El enlace caduca en {settings.reset_expira_minutos} minutos y solo se puede
+usar una vez.""",
             )
         except correo.ErrorCorreo:
             pass

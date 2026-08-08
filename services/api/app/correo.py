@@ -38,7 +38,7 @@ class CorreoResend:
     def activo(self) -> bool:
         return True
 
-    def enviar(self, destinatario: str, asunto: str, html: str) -> None:
+    def enviar(self, destinatario: str, asunto: str, html: str, texto: str) -> None:
         try:
             resp = httpx.post(
                 API_URL,
@@ -58,6 +58,11 @@ class CorreoResend:
                     "to": [destinatario],
                     "subject": asunto,
                     "html": html,
+                    # Las dos versiones, no solo la HTML: un mensaje corto, con
+                    # un unico enlace y sin alternativa en texto plano es un
+                    # patron que los filtros penalizan, y con un dominio recien
+                    # estrenado (reputacion cero) eso basta para acabar en spam.
+                    "text": texto,
                 },
                 timeout=10.0,
             )
@@ -78,12 +83,14 @@ class CorreoLog:
     def activo(self) -> bool:
         return False
 
-    def enviar(self, destinatario: str, asunto: str, html: str) -> None:
+    def enviar(self, destinatario: str, asunto: str, html: str, texto: str) -> None:
+        # Se registra la version en texto: en el log el HTML solo estorba, y lo
+        # que se busca aqui es el enlace.
         log.warning(
             "CORREO NO ENVIADO (sin RESEND_API_KEY). Para: %s | Asunto: %s\n%s",
             destinatario,
             asunto,
-            html,
+            texto,
         )
 
 

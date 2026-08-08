@@ -41,10 +41,12 @@ class FakeCorreo:
     def activo(self) -> bool:
         return True
 
-    def enviar(self, destinatario, asunto, html):
+    def enviar(self, destinatario, asunto, html, texto):
         if self.fallar:
             raise ErrorCorreo("proveedor caído (simulado)")
-        self.enviados.append({"para": destinatario, "asunto": asunto, "html": html})
+        self.enviados.append(
+            {"para": destinatario, "asunto": asunto, "html": html, "texto": texto}
+        )
 
     def token(self, clave="verificar"):
         """Saca el token del último enlace enviado (`verificar` o `restablecer`)."""
