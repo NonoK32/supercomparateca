@@ -350,8 +350,70 @@ input, select, button, textarea {
   background: var(--papel-alt);
   color: var(--tinta);
 }
-input[type="file"] { padding: var(--sp-2); }
 input::placeholder { color: var(--tinta-media); }
+
+/* Etiqueta de campo del impreso: rotulo corto en versalitas sobre el hueco. */
+.campo { display: grid; gap: var(--sp-1); }
+.campo > label {
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  color: var(--tinta-media);
+}
+
+/* -- Zona de la foto del ticket --
+   Es el recuadro punteado del impreso donde se grapa el recibo: dice donde va
+   el papel sin necesidad de instrucciones, y de paso quita de en medio el
+   <input type=file> del navegador, que es lo unico de la pantalla que no
+   pertenecia a este material. */
+.zona-foto {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+  border: 2px dashed var(--tinta-tenue);
+  border-radius: var(--radio);
+  background: var(--papel-hueco);
+  text-align: center;
+  cursor: pointer;
+}
+.zona-foto:hover { border-color: var(--tinta-media); }
+/* Al arrastrar encima, el recuadro se cierra sobre el papel. */
+.zona-foto.arrastrando {
+  border-color: var(--tinta);
+  border-style: solid;
+  background: var(--papel-alt);
+}
+/* El input sigue en el DOM (enfocable y anunciado), solo que invisible: sin
+   :focus-within el foco de teclado no se veria en ninguna parte. */
+.input-archivo {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.zona-foto:focus-within { outline: var(--foco); outline-offset: 2px; }
+.zona-titulo {
+  font-family: var(--mono);
+  font-size: var(--txt-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+}
+.zona-pista { font-size: var(--txt-xs); color: var(--tinta-media); }
+.foto-previa {
+  max-height: 180px;
+  max-width: 100%;
+  border: 1px solid var(--tinta-tenue);
+}
 
 input:focus-visible,
 select:focus-visible,

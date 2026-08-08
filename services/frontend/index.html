@@ -93,23 +93,46 @@
     <section id="vista-app" class="hidden">
 
       <div class="panel" id="panel-subir" role="tabpanel">
-        <div class="card">
+        <div class="card" id="card-subir">
           <h2>Subir ticket</h2>
-          <p class="muted">Haz una foto del ticket y se extraerán las líneas.</p>
+          <p class="muted">El supermercado y la fecha se leen del propio ticket.</p>
           <form id="form-ticket">
-            <select id="sel-supermercado" aria-label="Supermercado"></select>
-            <input type="file" id="ticket-imagen" accept="image/*" required>
-            <input type="date" id="ticket-fecha" aria-label="Fecha de compra">
-            <button type="submit">Subir y procesar</button>
+            <!-- El input real vive dentro de la etiqueta: sigue siendo un
+                 <input type=file> de verdad (accesible, enfocable, con la
+                 cámara del móvil), pero lo que se ve es el recuadro. -->
+            <label class="zona-foto" id="zona-foto">
+              <!-- Sin `required`: el navegador ancla su globo de validación al
+                   campo, que aquí está oculto. Lo comprueba el JS y avisa. -->
+              <input type="file" id="ticket-imagen" class="input-archivo"
+                     accept="image/*">
+              <img id="foto-previa" class="foto-previa hidden"
+                   alt="Foto del ticket elegida">
+              <span class="zona-titulo" id="zona-titulo">Pegar aquí el ticket</span>
+              <span class="zona-pista" id="zona-pista">Toca para elegir la foto · o arrástrala</span>
+            </label>
+            <button type="submit">Procesar ticket</button>
           </form>
         </div>
 
-        <p class="titulo-seccion">Supermercados</p>
-        <div class="card">
-          <div class="fila">
-            <input type="text" id="nuevo-super" placeholder="nuevo supermercado">
-            <button id="btn-add-super" class="sec" type="button">Añadir</button>
-          </div>
+        <!-- Segundo paso, solo cuando el OCR no ha podido leer alguno de los
+             dos datos. Se pregunta ANTES de enseñar las líneas a asociar. -->
+        <div class="card hidden" id="card-faltan">
+          <h2>Falta un dato</h2>
+          <p class="muted" id="faltan-texto"></p>
+          <form id="form-faltan">
+            <div class="campo hidden" id="campo-super">
+              <label for="sel-supermercado">Supermercado</label>
+              <select id="sel-supermercado"></select>
+              <input type="text" id="nuevo-super" class="hidden"
+                     placeholder="nombre del supermercado" aria-label="Nombre del supermercado nuevo">
+            </div>
+            <div class="campo hidden" id="campo-fecha">
+              <label for="ticket-fecha">Fecha de compra</label>
+              <input type="date" id="ticket-fecha">
+            </div>
+            <button type="submit">Continuar</button>
+            <button type="button" class="sec" id="btn-faltan-cancelar">Cancelar</button>
+          </form>
         </div>
       </div>
 

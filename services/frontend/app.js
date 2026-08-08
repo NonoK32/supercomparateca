@@ -35,7 +35,12 @@ async function api(path, { method = "GET", json, form } = {}) {
   if (resp.status === 204) return null;
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    throw new Error(textoError(data.detail, resp.status));
+    const error = new Error(textoError(data.detail, resp.status));
+    // El detalle estructurado viaja con el error (p. ej. qué datos del ticket
+    // no se han podido leer): quien sepa reaccionar lo mira, el resto enseña
+    // el mensaje y ya está.
+    error.detail = data.detail;
+    throw error;
   }
   return data;
 }
@@ -49,6 +54,7 @@ function textoError(detail, status) {
   if (Array.isArray(detail)) {
     return detail.map((d) => d.msg || JSON.stringify(d)).join(". ");
   }
+  if (detail.mensaje) return detail.mensaje;
   return JSON.stringify(detail);
 }
 
@@ -318,6 +324,7 @@ async function cargarSupermercados() {
   const sel = $("sel-supermercado");
   sel.innerHTML = "";
   nombreSupermercado.clear();
+  sel.appendChild(new Option("— elige un supermercado —", ""));
   for (const sm of sms) {
     nombreSupermercado.set(sm.id, sm.nombre);
     const opt = document.createElement("option");
@@ -325,50 +332,187 @@ async function cargarSupermercados() {
     opt.textContent = sm.nombre;
     sel.appendChild(opt);
   }
+  sel.appendChild(new Option("+ Crear supermercado nuevo…", SUPER_NUEVO));
 }
 
-$("btn-add-super").addEventListener("click", async () => {
-  const nombre = $("nuevo-super").value.trim();
-  if (!nombre) return;
-  try {
-    await api("/supermercados", { method: "POST", json: { nombre } });
-    $("nuevo-super").value = "";
-    await cargarSupermercados();
-    mensaje("Supermercado añadido");
-  } catch (err) {
-    mensaje(err.message, true);
-  }
-});
+// Valor centinela de la opción "crear supermercado", como en los productos.
+const SUPER_NUEVO = "nuevo";
 
 // ---- Tickets ----
+// La foto a la espera de que el usuario conteste lo que el OCR no supo leer.
+let fotoPendiente = null;
+
+function elegirFoto(archivo) {
+  if (!archivo) return;
+  const previa = $("foto-previa");
+  previa.src = URL.createObjectURL(archivo);
+  previa.classList.remove("hidden");
+  $("zona-titulo").textContent = "Ticket listo";
+  $("zona-pista").textContent = `${archivo.name} · toca para cambiarla`;
+}
+
+function olvidarFoto() {
+  $("form-ticket").reset();
+  const previa = $("foto-previa");
+  // El objeto de la previsualización se queda en memoria hasta que se revoca.
+  URL.revokeObjectURL(previa.src);
+  previa.src = "";
+  previa.classList.add("hidden");
+  $("zona-titulo").textContent = "Pegar aquí el ticket";
+  $("zona-pista").textContent = "Toca para elegir la foto · o arrástrala";
+}
+
+$("ticket-imagen").addEventListener("change", (e) => elegirFoto(e.target.files[0]));
+
+// Arrastrar y soltar en escritorio. Se asigna al input de verdad (vía
+// DataTransfer) para no llevar la cuenta del archivo por otro lado.
+const zona = $("zona-foto");
+for (const evento of ["dragenter", "dragover"]) {
+  zona.addEventListener(evento, (e) => {
+    e.preventDefault();
+    zona.classList.add("arrastrando");
+  });
+}
+for (const evento of ["dragleave", "drop"]) {
+  zona.addEventListener(evento, () => zona.classList.remove("arrastrando"));
+}
+zona.addEventListener("drop", (e) => {
+  e.preventDefault();
+  const archivo = e.dataTransfer.files[0];
+  if (!archivo || !archivo.type.startsWith("image/")) {
+    mensaje("Eso no parece una imagen", true);
+    return;
+  }
+  $("ticket-imagen").files = e.dataTransfer.files;
+  elegirFoto(archivo);
+});
+
 $("form-ticket").addEventListener("submit", async (e) => {
   e.preventDefault();
   const archivo = $("ticket-imagen").files[0];
-  if (!archivo) return;
-  const form = new FormData();
-  form.append("supermercado_id", $("sel-supermercado").value);
-  form.append("imagen", archivo);
-  if ($("ticket-fecha").value) form.append("fecha_compra", $("ticket-fecha").value);
+  if (!archivo) {
+    mensaje("Elige la foto del ticket", true);
+    return;
+  }
+  await procesarTicket(archivo, {}, e.target.querySelector("button[type=submit]"));
+});
 
-  // El OCR es con diferencia lo más lento de la app (segundos). Sin bloquear el
-  // botón se reenvía el mismo ticket dos veces creyendo que no ha hecho nada.
-  const btn = e.target.querySelector("button[type=submit]");
+// El OCR es con diferencia lo más lento de la app (segundos). Sin bloquear el
+// botón se reenvía el mismo ticket dos veces creyendo que no ha hecho nada.
+async function procesarTicket(archivo, datos, btn) {
+  const form = new FormData();
+  form.append("imagen", archivo);
+  for (const [clave, valor] of Object.entries(datos)) {
+    if (valor) form.append(clave, valor);
+  }
   const textoBtn = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Procesando…";
   try {
     const ticket = await api("/tickets", { method: "POST", form });
-    e.target.reset();
+    olvidarFoto();
+    cerrarPreguntaDatos();
+    fotoPendiente = null;
     await cargarTickets();
     activarPestana("panel-tickets");
     mostrarTicket(ticket);
     mensaje(`Ticket procesado: ${ticket.lineas.length} línea(s)`);
   } catch (err) {
-    mensaje(err.message, true);
+    // 422 con la lista de lo que falta: el ticket no se ha creado y hay que
+    // preguntarlo antes de seguir.
+    if (err.detail && Array.isArray(err.detail.faltan)) {
+      preguntarDatosQueFaltan(archivo, err.detail.faltan);
+    } else {
+      mensaje(err.message, true);
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = textoBtn;
   }
+}
+
+function preguntarDatosQueFaltan(archivo, faltan) {
+  fotoPendiente = archivo;
+  const pideSuper = faltan.includes("supermercado_id");
+  const pideFecha = faltan.includes("fecha_compra");
+  $("campo-super").classList.toggle("hidden", !pideSuper);
+  $("campo-fecha").classList.toggle("hidden", !pideFecha);
+  $("faltan-texto").textContent = pideSuper && pideFecha
+    ? "No he sabido leer el supermercado ni la fecha en la foto."
+    : pideSuper
+      ? "No he sabido leer de qué supermercado es la foto."
+      : "No he sabido leer la fecha de compra en la foto.";
+  $("card-subir").classList.add("hidden");
+  $("card-faltan").classList.remove("hidden");
+  (pideSuper ? $("sel-supermercado") : $("ticket-fecha")).focus();
+}
+
+function cerrarPreguntaDatos() {
+  $("card-faltan").classList.add("hidden");
+  $("card-subir").classList.remove("hidden");
+  $("form-faltan").reset();
+  $("nuevo-super").classList.add("hidden");
+}
+
+$("btn-faltan-cancelar").addEventListener("click", () => {
+  fotoPendiente = null;
+  cerrarPreguntaDatos();
+  olvidarFoto();
+});
+
+// Crear el supermercado desde aquí: es el único sitio donde hace falta, y con
+// el catálogo vacío (usuario nuevo) es además el camino obligado.
+$("sel-supermercado").addEventListener("change", () => {
+  const creando = $("sel-supermercado").value === SUPER_NUEVO;
+  $("nuevo-super").classList.toggle("hidden", !creando);
+  if (creando) $("nuevo-super").focus();
+});
+
+$("form-faltan").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!fotoPendiente) return;
+  const datos = {};
+
+  if (!$("campo-super").classList.contains("hidden")) {
+    const sel = $("sel-supermercado");
+    if (sel.value === SUPER_NUEVO) {
+      const nombre = $("nuevo-super").value.trim();
+      if (!nombre) {
+        mensaje("Escribe el nombre del supermercado", true);
+        return;
+      }
+      try {
+        const creado = await api("/supermercados", {
+          method: "POST",
+          json: { nombre },
+        });
+        await cargarSupermercados();
+        datos.supermercado_id = creado.id;
+      } catch (err) {
+        mensaje(err.message, true);
+        return;
+      }
+    } else if (sel.value) {
+      datos.supermercado_id = sel.value;
+    } else {
+      mensaje("Elige el supermercado", true);
+      return;
+    }
+  }
+
+  if (!$("campo-fecha").classList.contains("hidden")) {
+    if (!$("ticket-fecha").value) {
+      mensaje("Indica la fecha de compra", true);
+      return;
+    }
+    datos.fecha_compra = $("ticket-fecha").value;
+  }
+
+  await procesarTicket(
+    fotoPendiente,
+    datos,
+    e.target.querySelector("button[type=submit]"),
+  );
 });
 
 // Listado de tickets propios. Sin esto, un ticket a medio asociar quedaba
@@ -380,7 +524,7 @@ async function cargarTickets() {
     tickets = await api("/tickets");
   } catch (err) {
     mensaje(err.message, true);
-    return;
+    return [];
   }
   const cont = $("lista-tickets");
   cont.textContent = "";
@@ -390,12 +534,13 @@ async function cargarTickets() {
     p.className = "vacio";
     p.textContent = "Todavía no has subido ningún ticket.";
     cont.appendChild(p);
-    return;
+    return tickets;
   }
 
   // Más recientes primero: lo que se acaba de subir es lo que se va a asociar.
   tickets.sort((a, b) => b.fecha_compra.localeCompare(a.fecha_compra) || b.id - a.id);
   for (const t of tickets) cont.appendChild(filaTicket(t));
+  return tickets;
 }
 
 function filaTicket(ticket) {
@@ -456,7 +601,7 @@ function cerrarDetalleTicket() {
   $("card-ticket").classList.add("hidden");
 }
 
-function mostrarTicket(ticket) {
+function mostrarTicket(ticket, { animar = true } = {}) {
   ticketAbierto = ticket.id;
   for (const fila of document.querySelectorAll(".ticket-item")) {
     fila.setAttribute(
@@ -467,10 +612,13 @@ function mostrarTicket(ticket) {
   const card = $("card-ticket");
   card.classList.remove("hidden");
   // Reiniciar la animación: sin quitar la clase y forzar un reflujo, abrir un
-  // segundo ticket no volvería a "imprimirlo".
-  card.classList.remove("imprimiendo");
-  void card.offsetWidth;
-  card.classList.add("imprimiendo");
+  // segundo ticket no volvería a "imprimirlo". Al repintar tras asociar una
+  // línea no se anima: reimprimir el ticket entero a cada confirmación marea.
+  if (animar) {
+    card.classList.remove("imprimiendo");
+    void card.offsetWidth;
+    card.classList.add("imprimiendo");
+  }
 
   const badge = $("ticket-estado");
   badge.textContent = ticket.estado;
@@ -498,36 +646,110 @@ function filaLinea(linea) {
   if (linea.producto_id) {
     tdProducto.textContent = "✓ asociada";
   } else {
-    const input = document.createElement("input");
-    input.placeholder = "nombre del producto";
-    const btn = document.createElement("button");
-    btn.textContent = "Asociar";
-    btn.className = "sec";
-    btn.addEventListener("click", async () => {
-      const nombre = input.value.trim();
-      if (!nombre) return;
-      try {
-        await api(`/lineas/${linea.id}/asociar`, {
-          method: "POST",
-          json: { nuevo_producto: { nombre_normalizado: nombre } },
-        });
-        tdProducto.textContent = "✓ asociada";
-        await cargarProductos();
-        mensaje("Línea asociada");
-      } catch (err) {
-        mensaje(err.message, true);
-      }
-    });
-    const wrap = document.createElement("div");
-    wrap.className = "fila";
-    wrap.append(input, btn);
-    tdProducto.appendChild(wrap);
-    // Zona dudosa (§5bis punto 3): en vez de teclear el producto de cero, se
+    tdProducto.appendChild(selectorProducto(linea));
+    // Zona dudosa (§5bis punto 3): en vez de buscar el producto en la lista, se
     // ofrecen los parecidos. Se piden aparte para no bloquear el pintado.
     pintarSugerencias(linea, tdProducto);
   }
   tr.append(tdTexto, tdPrecio, tdProducto);
   return tr;
+}
+
+// Valor centinela de la opción "crear": no puede chocar con ningún id.
+const OPCION_NUEVO = "nuevo";
+
+// Elegir de la lista es el caso normal y crear, la excepción. Con un campo de
+// texto libre acababan naciendo "LECHE DESNATADA" y "Leche desnatada" como
+// productos distintos, y eso parte en dos el histórico de precios justo del
+// producto que más se compra.
+function selectorProducto(linea) {
+  const wrap = document.createElement("div");
+  wrap.className = "fila";
+
+  const sel = document.createElement("select");
+  sel.setAttribute("aria-label", `Producto para «${linea.texto_original}»`);
+  sel.appendChild(new Option("— elige un producto —", ""));
+  for (const p of catalogo) {
+    sel.appendChild(new Option(p.nombre_normalizado, String(p.id)));
+  }
+  sel.appendChild(new Option("+ Crear producto nuevo…", OPCION_NUEVO));
+
+  const nombre = document.createElement("input");
+  nombre.placeholder = "nombre del producto nuevo";
+  nombre.classList.add("hidden");
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "sec";
+  btn.textContent = "Asociar";
+
+  // Con el catálogo vacío el desplegable no ofrece nada que elegir: se abre ya
+  // en modo "crear" para que el primer ticket no obligue a pasar por una lista
+  // vacía. Sin `focus()`, que aquí habría una fila por línea del ticket.
+  if (!catalogo.length) {
+    sel.value = OPCION_NUEVO;
+    nombre.classList.remove("hidden");
+    nombre.value = linea.texto_original;
+  }
+
+  sel.addEventListener("change", () => {
+    const creando = sel.value === OPCION_NUEVO;
+    nombre.classList.toggle("hidden", !creando);
+    if (creando) {
+      // Se parte del texto del ticket: es lo que se va a escribir de todos
+      // modos, y en el móvil ahorra teclear. Sigue siendo editable, que es
+      // donde se limpia el ruido del OCR.
+      if (!nombre.value) nombre.value = linea.texto_original;
+      nombre.focus();
+      nombre.select();
+    }
+  });
+
+  const asociar = async () => {
+    let json;
+    if (sel.value === OPCION_NUEVO) {
+      const texto = nombre.value.trim();
+      if (!texto) {
+        mensaje("Escribe el nombre del producto nuevo", true);
+        nombre.focus();
+        return;
+      }
+      json = { nuevo_producto: { nombre_normalizado: texto } };
+    } else if (sel.value) {
+      json = { producto_id: Number(sel.value) };
+    } else {
+      mensaje("Elige un producto de la lista o crea uno nuevo", true);
+      sel.focus();
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await api(`/lineas/${linea.id}/asociar`, { method: "POST", json });
+      mensaje("Línea asociada");
+      await repintarTrasAsociar();
+    } catch (err) {
+      mensaje(err.message, true);
+      btn.disabled = false;
+    }
+  };
+
+  btn.addEventListener("click", asociar);
+  nombre.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") asociar();
+  });
+
+  wrap.append(sel, nombre, btn);
+  return wrap;
+}
+
+// Tras asociar se repinta el ticket entero en vez de tachar solo esa línea: así
+// el desplegable de las líneas que quedan incluye el producto recién creado, y
+// sus sugerencias se recalculan con el alias que se acaba de aprender.
+async function repintarTrasAsociar() {
+  await cargarProductos();
+  const tickets = await cargarTickets();
+  const abierto = tickets.find((t) => t.id === ticketAbierto);
+  if (abierto) mostrarTicket(abierto, { animar: false });
 }
 
 async function pintarSugerencias(linea, tdProducto) {
@@ -557,8 +779,8 @@ async function pintarSugerencias(linea, tdProducto) {
           method: "POST",
           json: { producto_id: s.producto_id },
         });
-        tdProducto.textContent = "✓ asociada";
         mensaje("Línea asociada");
+        await repintarTrasAsociar();
       } catch (err) {
         mensaje(err.message, true);
       }
@@ -569,8 +791,17 @@ async function pintarSugerencias(linea, tdProducto) {
 }
 
 // ---- Productos y comparativa ----
+// Catálogo en memoria: lo comparten el desplegable de cada línea sin asociar y
+// el de la comparativa, así asociar no dispara una petición por fila.
+let catalogo = [];
+
 async function cargarProductos() {
   const productos = await api("/productos");
+  // Por nombre: en un desplegable, el orden de creación no ayuda a nadie.
+  productos.sort((a, b) =>
+    a.nombre_normalizado.localeCompare(b.nombre_normalizado, "es"),
+  );
+  catalogo = productos;
   const sel = $("sel-producto");
   sel.innerHTML = "";
   for (const p of productos) {
