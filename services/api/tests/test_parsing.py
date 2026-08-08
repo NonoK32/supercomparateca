@@ -90,6 +90,63 @@ def test_ignora_los_tramos_de_impuestos():
     assert lineas[0].texto_original == "LECHE"
 
 
+def test_ignora_promociones_descuentos_y_resumenes():
+    # Todo esto salió como producto en un ticket real del Lidl.
+    texto = (
+        "PROMO LIDL PLUS 2,00\n"
+        "BASE IMPONIBLE 10,00\n"
+        "CUOTA IVA 1,00\n"
+        "SUMA 12,10\n"
+        "DESCUENTO 1,00\n"
+        "LECHE ENTERA 0,95"
+    )
+    lineas = parsear_lineas(texto)
+    assert [linea.texto_original for linea in lineas] == ["LECHE ENTERA"]
+
+
+def test_las_cuatro_lineas_que_se_colaron_en_un_ticket_real():
+    # Textos tal cual los guardó la app de un ticket del Lidl.
+    texto = 'Suma 5.30 69,10\nIMP.: 12,34\nPROMO LIDL PLUS 2,00\nDESC 1,00'
+    assert parsear_lineas(texto) == []
+
+
+def test_las_abreviaturas_solo_cuentan_si_van_solas():
+    # "DESC" a secas es un descuento; dentro de un nombre es un descafeinado.
+    lineas = parsear_lineas("CAFE DESC 250G 2,50")
+    assert len(lineas) == 1
+    assert lineas[0].texto_original == "CAFE DESC 250G"
+
+
+def test_un_importe_negativo_nunca_es_un_producto():
+    # La señal más fiable, y no depende de cómo llame cada cadena a su promoción.
+    assert parsear_lineas("AHORRO EN ESTA COMPRA -1,00") == []
+    assert parsear_lineas("Cheque bienvenida 0,50-") == []
+
+
+def test_el_descuento_no_se_lleva_por_delante_el_producto_de_arriba():
+    texto = "PLATANO 1,33\nDto. promocion -0,20"
+    lineas = parsear_lineas(texto)
+    assert len(lineas) == 1
+    assert lineas[0].texto_original == "PLATANO"
+    assert lineas[0].precio_total == Decimal("1.33")
+
+
+def test_un_producto_con_guion_en_el_nombre_se_conserva():
+    # "COLA-CAO" acaba en algo parecido a un signo, pero el guion va pegado a la
+    # palabra, no al importe.
+    lineas = parsear_lineas("COLA-CAO 2,50")
+    assert len(lineas) == 1
+    assert lineas[0].precio_total == Decimal("2.50")
+
+
+def test_no_descarta_productos_que_llevan_base_en_el_nombre():
+    # El Lidl vende "BASE PIZZA": por eso "BASE" no está en la lista y sí
+    # "IMPONIBLE".
+    lineas = parsear_lineas("BASE PIZZA 1,29")
+    assert len(lineas) == 1
+    assert lineas[0].texto_original == "BASE PIZZA"
+
+
 def test_un_porcentaje_en_el_nombre_no_lo_convierte_en_tramo():
     # "YOGUR 0% MG" lleva porcentaje y sigue siendo un producto: lo que delata
     # al tramo de impuestos es que no queda ninguna palabra de verdad.

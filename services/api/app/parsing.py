@@ -23,6 +23,11 @@ _UNITARIO = re.compile(
 # Palabras de líneas de resumen del ticket que no son productos. Se comparan por
 # palabra completa (no subcadena) para no descartar productos como "ACEITE DE
 # OLIVA" (que contiene "IVA").
+#
+# La lista solo admite palabras que NINGÚN producto puede llevar en el nombre.
+# Por eso no están "BASE" (existe la "BASE PIZZA" del Lidl) ni "PLUS": el coste
+# de descartar un producto de verdad es mucho peor que el de colar una línea de
+# resumen, que al menos se ve y se puede ignorar.
 _IGNORAR = frozenset(
     {
         "TOTAL",
@@ -33,8 +38,32 @@ _IGNORAR = frozenset(
         "CAMBIO",
         "ENTREGA",
         "DEVOLVER",
+        # Promociones y descuentos (el "PROMO LIDL PLUS" del Lidl).
+        "PROMO",
+        "PROMOCION",
+        "DESCUENTO",
+        "DESCUENTOS",
+        "DTO",
+        "AHORRO",
+        "AHORRAS",
+        "CUPON",
+        # Resumen de impuestos e importes: "BASE IMPONIBLE", "CUOTA IVA",
+        # "Suma 5.30 69,10".
+        "IMPONIBLE",
+        "CUOTA",
+        "SUMA",
+        "IMPORTE",
+        "REDONDEO",
     }
 )
+
+# Abreviaturas que solo delatan una línea de resumen cuando son TODA la
+# descripción. Vistas en un ticket del Lidl como "DESC" e "IMP.:", pero
+# descartarlas en cualquier posición se llevaría por delante productos reales:
+# los tickets estrechos abrevian, y "CAFE DESC 250G" es un descafeinado, no un
+# descuento. Igual "BASE": sola es la base imponible, acompañada es una BASE
+# PIZZA.
+_IGNORAR_SOLAS = frozenset({"DESC", "DCTO", "IMP", "IMPTE", "BASE"})
 
 # Palabras de verdad de una descripción: 3+ letras seguidas. Sirve para
 # distinguir un nombre de producto de una fila del resumen de impuestos.
@@ -54,6 +83,21 @@ def _palabras(descripcion: str) -> set[str]:
     tal cual dejaba pasar justo las líneas que hay que descartar.
     """
     return {re.sub(r"[^0-9A-ZÁÉÍÓÚÜÑ]", "", p) for p in descripcion.upper().split()}
+
+
+def _es_importe_negativo(cruda: str, precio: re.Match) -> bool:
+    """¿El importe va en negativo? Entonces es un descuento o un abono.
+
+    Es la señal más fiable que da un ticket —ningún producto cuesta -1,00— y no
+    depende de cómo llame cada cadena a sus promociones. Hay que comprobarlo
+    antes de recortar la descripción: el signo queda pegado al texto de la
+    izquierda y el `strip` posterior se lo llevaría por delante.
+
+    El signo detrás solo cuenta pegado al importe ("1,00-", como lo imprimen
+    algunas cajas); suelto podría ser un guion cualquiera de la línea.
+    """
+    antes = cruda[: precio.start()].rstrip()
+    return antes.endswith("-") or cruda[precio.end() :].startswith("-")
 
 
 def _ultimo_precio(fragmento: str) -> Decimal | None:
@@ -106,13 +150,19 @@ def parsear_lineas(texto: str) -> list[LineaParseada]:
 
         pendiente = None
         ultimo = precios[-1]
+        # Un importe en negativo es un descuento, no algo que se haya comprado.
+        if _es_importe_negativo(cruda, ultimo):
+            continue
         descripcion = cruda[: ultimo.start()].strip(" .-\t")
 
         # Debe quedar texto con letras (descarta líneas solo numéricas).
         if not any(c.isalpha() for c in descripcion):
             continue
         # Descarta líneas de resumen (TOTAL, IVA, etc.), por palabra completa.
-        if _IGNORAR & _palabras(descripcion):
+        palabras = _palabras(descripcion)
+        if _IGNORAR & palabras:
+            continue
+        if len(palabras) == 1 and palabras <= _IGNORAR_SOLAS:
             continue
         # Descarta el resumen de impuestos del pie ("A 21% 1,00 0,21 1,21").
         if _es_tramo_de_impuestos(descripcion):
