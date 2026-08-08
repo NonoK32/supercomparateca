@@ -17,7 +17,7 @@ def _crear_ticket(cliente, fake_ocr, texto="LECHE 0,89"):
     fake_ocr.texto = texto
     return cliente.post(
         "/tickets",
-        data={"supermercado_id": sm["id"]},
+        data={"supermercado_id": sm["id"], "fecha_compra": "2026-08-01"},
         files={"imagen": ("t.jpg", b"x", "image/jpeg")},
     ).json()
 

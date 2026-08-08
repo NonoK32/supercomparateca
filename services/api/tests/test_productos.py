@@ -49,7 +49,7 @@ def test_no_se_puede_eliminar_producto_en_uso(client, fake_ocr):
     fake_ocr.texto = "LECHE 0,89\n"
     ticket = client.post(
         "/tickets",
-        data={"supermercado_id": sm["id"]},
+        data={"supermercado_id": sm["id"], "fecha_compra": "2026-08-01"},
         files={"imagen": ("t.jpg", b"x", "image/jpeg")},
     ).json()
     asoc = client.post(

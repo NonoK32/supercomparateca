@@ -8,7 +8,7 @@ def _supermercado(client, nombre="Mercadona"):
 def _subir_ticket(client, sm_id, texto=TICKET):
     return client.post(
         "/tickets",
-        data={"supermercado_id": sm_id},
+        data={"supermercado_id": sm_id, "fecha_compra": "2026-08-01"},
         files={"imagen": ("t.jpg", b"x", "image/jpeg")},
     ).json()
 

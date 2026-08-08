@@ -98,7 +98,13 @@ def paso_subo_ticket(context, nombre):
     context.fake_ocr.texto = context.text
     resp = context.client.post(
         "/tickets",
-        data={"supermercado_id": context.supermercados[nombre]},
+        # El escenario dice de qué supermercado es el ticket, así que se manda;
+        # la fecha también, porque los textos de ejemplo no la llevan y el
+        # endpoint ya no supone que un ticket sin fecha legible es de hoy.
+        data={
+            "supermercado_id": context.supermercados[nombre],
+            "fecha_compra": "2026-08-01",
+        },
         files={"imagen": ("ticket.jpg", b"bytes", "image/jpeg")},
     )
     assert resp.status_code == 201, resp.text

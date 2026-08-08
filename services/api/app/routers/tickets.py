@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import asociacion, models, parsing, schemas
+from .. import asociacion, deteccion, models, parsing, schemas
 from ..database import get_db
 from ..ocr import OCRClient, get_ocr_client
 from ..seguridad import get_current_user
@@ -14,16 +14,25 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 @router.post("", response_model=schemas.TicketRead, status_code=status.HTTP_201_CREATED)
 def subir(
-    supermercado_id: int = Form(...),
     imagen: UploadFile = File(...),
+    supermercado_id: int | None = Form(default=None),
     fecha_compra: date | None = Form(default=None),
     db: Session = Depends(get_db),
     ocr: OCRClient = Depends(get_ocr_client),
     usuario: models.Usuario = Depends(get_current_user),
 ):
-    supermercado = db.get(models.Supermercado, supermercado_id)
-    if supermercado is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Supermercado no encontrado")
+    """Sube la foto de un ticket y devuelve sus líneas.
+
+    El supermercado y la fecha se deducen del propio ticket (`deteccion.py`);
+    van en el papel, así que pedírselos al usuario es hacerle transcribir. Solo
+    si alguno no sale se contesta **422 con la lista de lo que falta**, para que
+    el cliente lo pregunte y reenvíe. En ese caso **no se crea nada**: un ticket
+    a medias no se puede comparar con nada y ensuciaría el histórico.
+    """
+    if supermercado_id is not None:
+        supermercado = db.get(models.Supermercado, supermercado_id)
+        if supermercado is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Supermercado no encontrado")
 
     contenido = imagen.file.read()
     if not contenido:
@@ -40,15 +49,42 @@ def subir(
     # caja, y nada de eso hace falta para comparar precios (minimización,
     # art. 5.1.c RGPD). De aquí solo sobreviven las líneas parseadas.
 
+    if supermercado_id is None:
+        supermercado_id = deteccion.detectar_supermercado(
+            texto,
+            [(sm.id, sm.nombre) for sm in db.scalars(select(models.Supermercado))],
+        )
+    if fecha_compra is None:
+        # `hoy` en UTC y explícito: date.today() depende de la zona del
+        # servidor, y el contenedor va en UTC.
+        fecha_compra = deteccion.detectar_fecha(
+            texto, datetime.now(timezone.utc).date()
+        )
+
+    faltan = [
+        campo
+        for campo, valor in (
+            ("supermercado_id", supermercado_id),
+            ("fecha_compra", fecha_compra),
+        )
+        if valor is None
+    ]
+    if faltan:
+        # Antes se daba por buena la fecha de hoy cuando no venía. Era cómodo y
+        # casi siempre falso: los tickets se suben días después de la compra, y
+        # una fecha inventada no se distingue luego de una real.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            {
+                "mensaje": "No he podido leer todos los datos del ticket.",
+                "faltan": faltan,
+            },
+        )
+
     ticket = models.Ticket(
         usuario_id=usuario.id,
         supermercado_id=supermercado_id,
-        # Si el usuario no indica fecha, se toma la de hoy en UTC. Explicito
-        # porque date.today() depende de la zona del servidor: el contenedor va
-        # en UTC, asi que un ticket subido de madrugada en España puede quedar
-        # fechado el dia anterior. Que la fecha la ponga el cliente sigue siendo
-        # lo correcto; esto es solo el respaldo.
-        fecha_compra=fecha_compra or datetime.now(timezone.utc).date(),
+        fecha_compra=fecha_compra,
         estado="pendiente",
     )
     for linea in parsing.parsear_lineas(texto):

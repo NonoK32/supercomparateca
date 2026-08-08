@@ -19,9 +19,9 @@ def _como(client, email):
 
 
 def _subir_ticket(client, sm_id, fecha=None):
-    datos = {"supermercado_id": sm_id}
-    if fecha:
-        datos["fecha_compra"] = fecha
+    # La fecha va siempre: el endpoint ya no supone que un ticket sin fecha
+    # legible es de hoy, la pide.
+    datos = {"supermercado_id": sm_id, "fecha_compra": fecha or "2026-08-01"}
     return client.post(
         "/tickets", data=datos, files={"imagen": ("t.jpg", b"x", "image/jpeg")}
     ).json()

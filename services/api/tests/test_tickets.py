@@ -16,7 +16,7 @@ def test_subir_ticket_extrae_lineas(client, fake_ocr):
 
     resp = client.post(
         "/tickets",
-        data={"supermercado_id": sm["id"]},
+        data={"supermercado_id": sm["id"], "fecha_compra": "2026-08-01"},
         files={"imagen": ("ticket.jpg", b"bytes-de-imagen", "image/jpeg")},
     )
     assert resp.status_code == 201
@@ -36,11 +36,59 @@ def test_subir_ticket_extrae_lineas(client, fake_ocr):
     assert float(ticket["lineas"][0]["precio_total"]) == 0.89
 
 
+def test_deduce_supermercado_y_fecha_del_propio_ticket(client, fake_ocr):
+    # Los dos datos van impresos en el papel: subir la foto debe bastar.
+    _crear_supermercado(client)
+    fake_ocr.texto = "MERCADONA S.A.\n05/08/2026 13:42\n" + TICKET_MERCADONA
+
+    resp = client.post("/tickets", files={"imagen": ("t.jpg", b"x", "image/jpeg")})
+
+    assert resp.status_code == 201
+    assert resp.json()["fecha_compra"] == "2026-08-05"
+    assert resp.json()["supermercado_id"] == 1
+
+
+def test_si_no_se_deducen_se_piden_y_no_se_crea_nada(client, fake_ocr):
+    _crear_supermercado(client)
+    fake_ocr.texto = "LECHE DESNATADA 0,89\nPAN 1,25"
+
+    resp = client.post("/tickets", files={"imagen": ("t.jpg", b"x", "image/jpeg")})
+
+    assert resp.status_code == 422
+    assert set(resp.json()["detail"]["faltan"]) == {"supermercado_id", "fecha_compra"}
+    # Un ticket a medias no se puede comparar con nada: no debe quedar rastro.
+    assert client.get("/tickets").json() == []
+
+
+def test_solo_se_pide_lo_que_falta(client, fake_ocr):
+    _crear_supermercado(client)
+    fake_ocr.texto = "MERCADONA S.A.\nLECHE DESNATADA 0,89"
+
+    resp = client.post("/tickets", files={"imagen": ("t.jpg", b"x", "image/jpeg")})
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["faltan"] == ["fecha_compra"]
+
+
+def test_lo_que_indica_el_usuario_gana_a_lo_detectado(client, fake_ocr):
+    # Al reenviar tras preguntar, la respuesta del usuario manda.
+    sm = _crear_supermercado(client)
+    fake_ocr.texto = "MERCADONA S.A.\n05/08/2026\nLECHE 0,89"
+
+    resp = client.post(
+        "/tickets",
+        data={"supermercado_id": sm["id"], "fecha_compra": "2026-07-01"},
+        files={"imagen": ("t.jpg", b"x", "image/jpeg")},
+    )
+
+    assert resp.json()["fecha_compra"] == "2026-07-01"
+
+
 def test_supermercado_inexistente_da_404(client, fake_ocr):
     fake_ocr.texto = "LECHE 0,89"
     resp = client.post(
         "/tickets",
-        data={"supermercado_id": 999},
+        data={"supermercado_id": 999, "fecha_compra": "2026-08-01"},
         files={"imagen": ("t.jpg", b"x", "image/jpeg")},
     )
     assert resp.status_code == 404
@@ -50,7 +98,7 @@ def test_imagen_vacia_da_400(client):
     sm = _crear_supermercado(client)
     resp = client.post(
         "/tickets",
-        data={"supermercado_id": sm["id"]},
+        data={"supermercado_id": sm["id"], "fecha_compra": "2026-08-01"},
         files={"imagen": ("t.jpg", b"", "image/jpeg")},
     )
     assert resp.status_code == 400
@@ -61,7 +109,7 @@ def test_listar_y_obtener(client, fake_ocr):
     fake_ocr.texto = "LECHE 0,89"
     creado = client.post(
         "/tickets",
-        data={"supermercado_id": sm["id"]},
+        data={"supermercado_id": sm["id"], "fecha_compra": "2026-08-01"},
         files={"imagen": ("t.jpg", b"x", "image/jpeg")},
     ).json()
 
@@ -79,7 +127,7 @@ def test_eliminar(client, fake_ocr):
     fake_ocr.texto = "LECHE 0,89"
     creado = client.post(
         "/tickets",
-        data={"supermercado_id": sm["id"]},
+        data={"supermercado_id": sm["id"], "fecha_compra": "2026-08-01"},
         files={"imagen": ("t.jpg", b"x", "image/jpeg")},
     ).json()
 
