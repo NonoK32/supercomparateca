@@ -4,8 +4,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 # Tesseract + datos del idioma español (los tickets son en español).
+# poppler-utils es lo que usa pdf2image para rasterizar un PDF escaneado; los
+# PDF con capa de texto no lo necesitan (esos los lee pypdf, en Python puro).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-spa \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr tesseract-ocr-spa poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

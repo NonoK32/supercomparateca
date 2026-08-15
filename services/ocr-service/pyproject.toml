@@ -8,6 +8,8 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "pytesseract>=0.3.10",
     "pillow>=10",
+    "pypdf>=4",
+    "pdf2image>=1.17",
     "python-multipart>=0.0.9",
 ]
 
