@@ -210,6 +210,30 @@ class ComparativaCesta(BaseModel):
     supermercados: list[TotalSupermercado]
 
 
+class ListaCompra(BaseModel):
+    """Los productos que el usuario ha puesto en su lista.
+
+    No se guarda en ninguna parte: la lista vive en el navegador y se manda
+    entera para calcular. Una lista es cosa de un rato, y persistirla traería
+    su propio CRUD y su borrado sin que nadie lo haya pedido.
+    """
+
+    producto_ids: list[int] = Field(min_length=1, max_length=50)
+
+
+class ProductoLista(BaseModel):
+    """Un producto de la lista con TODOS sus precios, de menor a mayor."""
+
+    producto_id: int
+    nombre_normalizado: str
+    supermercados: list[PrecioSupermercado]
+
+
+class ComparativaLista(BaseModel):
+    productos: list[ProductoLista]
+    supermercados: list[TotalSupermercado]
+
+
 class SugerenciaProducto(BaseModel):
     """Producto propuesto para una línea sin asociar (§5bis punto 3)."""
 

@@ -83,8 +83,8 @@ def cesta_habitual(db: Session, usuario_id: int, limite: int = 10) -> list[dict]
     ]
 
 
-def comparativa_cesta(db: Session, usuario_id: int, limite: int = 10) -> dict:
-    """Coste total de la cesta habitual en cada supermercado (FR10).
+def totales_por_supermercado(db: Session, producto_ids: list[int]) -> list[dict]:
+    """Cuánto costaría ese conjunto de productos en cada supermercado.
 
     Los precios son los del histórico **compartido** (Fase 3): se usa el más
     reciente de cada producto en cada supermercado, venga del ticket de quien
@@ -93,11 +93,9 @@ def comparativa_cesta(db: Session, usuario_id: int, limite: int = 10) -> dict:
     productos parecería el más barato. Por eso el orden es cobertura primero,
     y a igual cobertura el total más bajo.
     """
-    cesta = cesta_habitual(db, usuario_id, limite)
-
     totales: dict[int, dict] = {}
-    for item in cesta:
-        for precio in precios_por_supermercado(db, item["producto_id"]):
+    for producto_id in producto_ids:
+        for precio in precios_por_supermercado(db, producto_id):
             entrada = totales.setdefault(
                 precio["supermercado_id"],
                 {
@@ -110,11 +108,54 @@ def comparativa_cesta(db: Session, usuario_id: int, limite: int = 10) -> dict:
             entrada["total"] += precio["precio_actual"]
             entrada["productos_cubiertos"] += 1
 
-    supermercados = sorted(
+    return sorted(
         totales.values(),
         key=lambda e: (-e["productos_cubiertos"], e["total"]),
     )
-    return {"productos": cesta, "supermercados": supermercados}
+
+
+def comparativa_cesta(db: Session, usuario_id: int, limite: int = 10) -> dict:
+    """Coste total de la cesta habitual en cada supermercado (FR10)."""
+    cesta = cesta_habitual(db, usuario_id, limite)
+    return {
+        "productos": cesta,
+        "supermercados": totales_por_supermercado(
+            db, [item["producto_id"] for item in cesta]
+        ),
+    }
+
+
+def comparativa_lista(db: Session, producto_ids: list[int]) -> dict:
+    """Lo mismo que la cesta habitual, pero sobre una lista elegida a mano.
+
+    La diferencia con FR10 es de dónde salen los productos, no cómo se calcula:
+    allí se derivan del histórico del usuario y aquí los pone él. Por eso el
+    reparto de precios es el mismo código.
+
+    De cada producto se devuelven **todos** sus precios ordenados de menor a
+    mayor, y no solo el mejor: sirven para decidir producto a producto, que es
+    la mitad del trabajo de hacer la compra. Un producto sin ningún precio se
+    devuelve igualmente con la lista vacía, porque callarlo haría creer que la
+    recomendación lo tiene en cuenta.
+    """
+    productos = []
+    for producto_id in producto_ids:
+        producto = db.get(models.Producto, producto_id)
+        if producto is None:
+            continue
+        productos.append(
+            {
+                "producto_id": producto.id,
+                "nombre_normalizado": producto.nombre_normalizado,
+                "supermercados": precios_por_supermercado(db, producto.id),
+            }
+        )
+    return {
+        "productos": productos,
+        "supermercados": totales_por_supermercado(
+            db, [p["producto_id"] for p in productos]
+        ),
+    }
 
 
 def historico(
