@@ -19,12 +19,25 @@ from app.ocr import get_ocr_client
 
 
 class FakeOCR:
-    """OCR falso para tests: devuelve el texto que se le fije, sin red ni Tesseract."""
+    """OCR falso para tests: devuelve el texto que se le fije, sin red ni Tesseract.
+
+    `error` simula que el ocr-service no ha sabido abrir el archivo, que con los
+    PDF deja de ser rebuscado (uno con contraseña, uno a medio descargar).
+    """
 
     texto = ""
+    error: Exception | None = None
+
+    def __init__(self):
+        # Un texto por archivo, para los tickets subidos en varias capturas. Si
+        # está vacía se devuelve `texto` en cada llamada, que es lo que espera
+        # casi todo test.
+        self.paginas = []
 
     def extraer_texto(self, *args, **kwargs) -> str:
-        return self.texto
+        if self.error is not None:
+            raise self.error
+        return self.paginas.pop(0) if self.paginas else self.texto
 
 
 class FakeCorreo:

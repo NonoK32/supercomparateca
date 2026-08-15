@@ -1,3 +1,5 @@
+from app.ocr import ArchivoNoLegible
+
 TICKET_MERCADONA = """MERCADONA S.A.
 LECHE DESNATADA 0,89
 12 HUEVOS M 1,95
@@ -92,6 +94,92 @@ def test_supermercado_inexistente_da_404(client, fake_ocr):
         files={"imagen": ("t.jpg", b"x", "image/jpeg")},
     )
     assert resp.status_code == 404
+
+
+def test_subir_ticket_en_pdf(client, fake_ocr):
+    # Un e-ticket llega en PDF, no en foto. El api no mira el tipo: lo pasa tal
+    # cual al ocr-service, que ya sabe distinguir imagen de PDF.
+    _crear_supermercado(client)
+    fake_ocr.texto = "MERCADONA S.A.\n05/08/2026 13:42\n" + TICKET_MERCADONA
+
+    resp = client.post(
+        "/tickets",
+        files={"imagen": ("ticket.pdf", b"%PDF-1.4 ...", "application/pdf")},
+    )
+
+    assert resp.status_code == 201
+    assert len(resp.json()["lineas"]) >= 1
+
+
+def test_varias_capturas_son_un_solo_ticket(client, fake_ocr):
+    # Un ticket largo no cabe en una foto. Las capturas son trozos del mismo
+    # papel, así que salen un ticket, no tres.
+    _crear_supermercado(client)
+    fake_ocr.paginas = [
+        "MERCADONA S.A.\n05/08/2026 13:42\nLECHE DESNATADA 0,89",
+        "12 HUEVOS M 1,95\nPAN DE MOLDE 1,25",
+        "TOTAL 4,09",
+    ]
+
+    resp = client.post(
+        "/tickets",
+        files=[("imagen", (f"p{n}.jpg", b"x", "image/jpeg")) for n in range(3)],
+    )
+
+    assert resp.status_code == 201
+    ticket = resp.json()
+    textos = [linea["texto_original"] for linea in ticket["lineas"]]
+    # Líneas de las tres capturas, en el mismo ticket y en orden.
+    assert any("LECHE" in t for t in textos)
+    assert any("HUEVOS" in t for t in textos)
+    assert any("PAN" in t for t in textos)
+    assert all("TOTAL" not in t.upper() for t in textos)
+    # La cabecera solo está en la primera captura, y de ahí salen los dos datos.
+    assert ticket["supermercado_id"] == 1
+    assert ticket["fecha_compra"] == "2026-08-05"
+    assert len(client.get("/tickets").json()) == 1
+
+
+def test_un_solo_archivo_sigue_funcionando_igual(client, fake_ocr):
+    # El campo se envía en singular desde siempre; aceptar una lista no puede
+    # romper a quien manda uno solo.
+    _crear_supermercado(client)
+    fake_ocr.texto = "MERCADONA S.A.\n05/08/2026\nLECHE DESNATADA 0,89"
+
+    resp = client.post("/tickets", files={"imagen": ("t.jpg", b"x", "image/jpeg")})
+
+    assert resp.status_code == 201
+    assert len(resp.json()["lineas"]) == 1
+
+
+def test_demasiados_archivos_da_400(client, fake_ocr):
+    # Cada archivo es una pasada entera de OCR: sin tope, una sola petición
+    # tiene el servicio ocupado minutos.
+    _crear_supermercado(client)
+    fake_ocr.texto = "MERCADONA S.A.\n05/08/2026\nLECHE 0,89"
+
+    resp = client.post(
+        "/tickets",
+        files=[("imagen", (f"p{n}.jpg", b"x", "image/jpeg")) for n in range(11)],
+    )
+
+    assert resp.status_code == 400
+    assert client.get("/tickets").json() == []
+
+
+def test_archivo_ilegible_da_400_y_no_crea_nada(client, fake_ocr):
+    # Un PDF con contraseña, o a medio descargar: es culpa de lo que se sube,
+    # no del servidor, así que 400 y no el 500 que salía antes.
+    _crear_supermercado(client)
+    fake_ocr.error = ArchivoNoLegible("no se puede abrir")
+
+    resp = client.post(
+        "/tickets",
+        files={"imagen": ("t.pdf", b"%PDF-1.4 roto", "application/pdf")},
+    )
+
+    assert resp.status_code == 400
+    assert client.get("/tickets").json() == []
 
 
 def test_imagen_vacia_da_400(client):

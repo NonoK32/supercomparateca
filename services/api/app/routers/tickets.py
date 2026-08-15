@@ -6,22 +6,37 @@ from sqlalchemy.orm import Session
 
 from .. import asociacion, deteccion, models, parsing, schemas
 from ..database import get_db
-from ..ocr import OCRClient, get_ocr_client
+from ..ocr import ArchivoNoLegible, OCRClient, get_ocr_client
 from ..seguridad import get_current_user
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
+# Tope de archivos por ticket. Cada uno es una pasada entera de OCR (segundos),
+# así que sin tope una sola petición puede tener el servicio ocupado minutos. Un
+# ticket de compra grande cabe de sobra en esto.
+MAX_ARCHIVOS = 10
+
 
 @router.post("", response_model=schemas.TicketRead, status_code=status.HTTP_201_CREATED)
 def subir(
-    imagen: UploadFile = File(...),
+    imagen: list[UploadFile] = File(...),
     supermercado_id: int | None = Form(default=None),
     fecha_compra: date | None = Form(default=None),
     db: Session = Depends(get_db),
     ocr: OCRClient = Depends(get_ocr_client),
     usuario: models.Usuario = Depends(get_current_user),
 ):
-    """Sube la foto de un ticket y devuelve sus líneas.
+    """Sube un ticket —fotos o PDF— y devuelve sus líneas.
+
+    Admite **varios archivos**: un ticket largo no cabe en una foto, y las
+    capturas son trozos de un mismo papel, no tickets distintos. Se leen en el
+    orden en que llegan y sus textos se concatenan, así que el resultado es un
+    único ticket. Ese orden importa: el supermercado se busca **solo en la
+    cabecera** (`deteccion.py`), que es la del primer archivo.
+
+    El campo se sigue llamando `imagen` —y en singular— porque un cliente que
+    mande un solo archivo, como hasta ahora, sigue funcionando igual: en
+    multipart la lista no es más que repetir el campo.
 
     El supermercado y la fecha se deducen del propio ticket (`deteccion.py`);
     van en el papel, así que pedírselos al usuario es hacerle transcribir. Solo
@@ -34,16 +49,33 @@ def subir(
         if supermercado is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Supermercado no encontrado")
 
-    contenido = imagen.file.read()
-    if not contenido:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La imagen está vacía")
+    if len(imagen) > MAX_ARCHIVOS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Demasiados archivos para un ticket (máximo {MAX_ARCHIVOS}).",
+        )
 
-    texto = ocr.extraer_texto(
-        contenido,
-        imagen.filename or "ticket",
-        imagen.content_type or "application/octet-stream",
-    )
-    # Ni la imagen ni el texto completo se persisten. El texto solo vive en
+    textos = []
+    for archivo in imagen:
+        contenido = archivo.file.read()
+        if not contenido:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "El archivo está vacío")
+        try:
+            textos.append(
+                ocr.extraer_texto(
+                    contenido,
+                    archivo.filename or "ticket",
+                    archivo.content_type or "application/octet-stream",
+                )
+            )
+        except ArchivoNoLegible:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "No he podido abrir el archivo. Sube una foto o un PDF del ticket "
+                "(y si el PDF tiene contraseña, quítasela antes).",
+            )
+    texto = "\n".join(textos)
+    # Ni los archivos ni el texto completo se persisten. El texto solo vive en
     # memoria el tiempo de parsearlo: un ticket real lleva los 4 últimos
     # dígitos de la tarjeta, el número de fidelización, la hora exacta y la
     # caja, y nada de eso hace falta para comparar precios (minimización,
