@@ -1114,7 +1114,10 @@ const SUGERENCIAS = 8;
 // Lo seleccionado en cada buscador. `b` solo existe si se ha pedido comparar.
 const elegido = { a: null, b: null };
 
-function montarBuscador(clave) {
+// `alElegir` decide qué pasa al elegir: el tab Productos lo enseña, la lista de
+// la compra lo añade. Todo lo demás (sugerencias, teclado, carreras) es igual en
+// los dos sitios y no tiene por qué duplicarse.
+function montarBuscador(clave, alElegir) {
   const entrada = $(`busca-${clave}`);
   const lista = $(`sug-${clave}`);
   let opciones = [];
@@ -1145,10 +1148,8 @@ function montarBuscador(clave) {
   }
 
   function elegir(producto) {
-    elegido[clave] = producto;
-    entrada.value = producto.nombre_normalizado;
     cerrar();
-    pintarProductos();
+    alElegir(producto, entrada);
   }
 
   async function buscar(texto) {
@@ -1204,6 +1205,7 @@ function montarBuscador(clave) {
       pintarProductos();
     }
     clearTimeout(temporizador);
+
     if (!texto) {
       cerrar();
       return;
@@ -1232,8 +1234,13 @@ function montarBuscador(clave) {
   entrada.addEventListener("blur", () => setTimeout(cerrar, 0));
 }
 
-montarBuscador("a");
-montarBuscador("b");
+const alElegirEnProductos = (clave) => (producto, entrada) => {
+  elegido[clave] = producto;
+  entrada.value = producto.nombre_normalizado;
+  pintarProductos();
+};
+montarBuscador("a", alElegirEnProductos("a"));
+montarBuscador("b", alElegirEnProductos("b"));
 
 $("btn-comparar-otro").addEventListener("click", () => {
   $("campo-b").classList.remove("hidden");
@@ -1274,8 +1281,12 @@ async function pintarProductos() {
     return;
   }
   cont.replaceChildren();
-  for (const data of datos) mostrarComparativa(data, { limpiar: false });
-  if (datos.length === 2) mostrarDuelo(datos);
+  // Con dos productos, el veredicto es el papel de abajo. Si cada uno sellara
+  // además su «más barato», habría tres sellos en pantalla y el sello dejaría
+  // de significar nada: está reservado a una vez por resultado.
+  const duelo = datos.length === 2;
+  for (const data of datos) mostrarComparativa(data, { limpiar: false, sello: !duelo });
+  if (duelo) mostrarDuelo(datos);
 }
 
 // Cuál de los dos productos sale más barato, cada uno a su mejor precio. Es la
@@ -1306,8 +1317,9 @@ function mostrarDuelo([uno, otro]) {
     ),
   );
 
-  const diferencia = filas[1].precio - filas[0].precio;
-  papel.append(raya(true), lineaTotal("Diferencia", euros(diferencia)));
+  // Sin «diferencia»: restarle el pan a la leche no es un dato de nada, y quien
+  // compare dos marcas del mismo producto tiene los dos precios ahí al lado.
+  papel.append(raya(true));
   papel.appendChild(sello("Más barato", filas[0].data.nombre_normalizado));
 }
 
@@ -1443,7 +1455,136 @@ function mostrarComparativa(data, opciones = {}) {
   // Con un solo supermercado no hay nada que comparar: ni diferencia ni sello.
   if (data.supermercados.length > 1) {
     papel.append(raya(true), lineaTotal("Diferencia", euros(diferencia)));
-    papel.appendChild(sello("Más barato", barato.supermercado));
+    if (opciones.sello !== false) {
+      papel.appendChild(sello("Más barato", barato.supermercado));
+    }
+  }
+}
+
+// ---- Lista de la compra ----
+// La lista vive aquí, en el navegador, y se manda entera para calcular: el api
+// no la guarda. Una lista es cosa de un rato, y persistirla traería su propio
+// CRUD y su borrado sin que nadie lo haya pedido.
+let listaCompra = [];
+
+montarBuscador("lista", (producto, entrada) => {
+  // El cuadro se vacía en vez de quedarse con el nombre: aquí no se «elige» un
+  // producto, se van añadiendo, y lo siguiente que se hace es buscar otro.
+  entrada.value = "";
+  if (listaCompra.some((p) => p.id === producto.id)) {
+    mensaje(`«${producto.nombre_normalizado}» ya está en la lista`);
+    return;
+  }
+  listaCompra.push(producto);
+  actualizarLista();
+});
+
+$("btn-vaciar-lista").addEventListener("click", () => {
+  listaCompra = [];
+  actualizarLista();
+});
+
+async function actualizarLista() {
+  const hayAlgo = listaCompra.length > 0;
+  $("lista-vacia").classList.toggle("hidden", hayAlgo);
+  $("btn-vaciar-lista").classList.toggle("hidden", !hayAlgo);
+  if (!hayAlgo) {
+    $("lista-compra").replaceChildren();
+    $("resultado-lista").replaceChildren();
+    return;
+  }
+
+  let datos;
+  try {
+    datos = await api("/cesta/lista", {
+      method: "POST",
+      json: { producto_ids: listaCompra.map((p) => p.id) },
+    });
+  } catch (err) {
+    mensaje(err.message, true);
+    return;
+  }
+  pintarRenglones(datos.productos);
+  mostrarDondeComprar(datos);
+}
+
+function pintarRenglones(productos) {
+  const ul = $("lista-compra");
+  ul.replaceChildren();
+  for (const producto of productos) {
+    const li = document.createElement("li");
+    li.className = "renglon";
+
+    const cabeza = document.createElement("div");
+    cabeza.className = "renglon-cabeza";
+    const nombre = document.createElement("span");
+    nombre.className = "renglon-nombre";
+    nombre.textContent = producto.nombre_normalizado;
+    cabeza.append(
+      nombre,
+      boton("Quitar", "ghost quitar", () => {
+        listaCompra = listaCompra.filter((p) => p.id !== producto.producto_id);
+        actualizarLista();
+      }),
+    );
+
+    const precios = document.createElement("p");
+    precios.className = "renglon-precios";
+    if (!producto.supermercados.length) {
+      precios.classList.add("sin-precio");
+      precios.textContent = "Sin precios todavía · sube un ticket que lo incluya";
+    } else {
+      // De menor a mayor, como los devuelve el api. El primero es dónde
+      // comprarlo, y por eso es el único que va marcado.
+      producto.supermercados.forEach((s, i) => {
+        const trozo = document.createElement("span");
+        trozo.className = i === 0 ? "precio-sm gana" : "precio-sm";
+        trozo.textContent = `${s.supermercado} ${euros(s.precio_actual)}`;
+        precios.appendChild(trozo);
+      });
+    }
+
+    li.append(cabeza, precios);
+    ul.appendChild(li);
+  }
+}
+
+// El veredicto sí es papel emitido por la máquina: lleva dentado y sello, como
+// el ticket y la comparativa.
+function mostrarDondeComprar(datos) {
+  const cont = $("resultado-lista");
+  const total = datos.productos.length;
+  if (!datos.supermercados.length) {
+    vacio(cont, "Ninguno de estos productos tiene precios todavía. Sube un ticket que los incluya.");
+    return;
+  }
+
+  const papel = papelNuevo(cont, "Dónde comprar");
+  papel.appendChild(
+    tablaRecibo(
+      ["Supermercado", "Cubre", "Total"],
+      datos.supermercados.map((s, i) => ({
+        gana: i === 0,
+        celdas: [s.supermercado, `${s.productos_cubiertos}/${total}`, euros(s.total)],
+      })),
+    ),
+  );
+  papel.append(raya(true));
+
+  const mejor = datos.supermercados[0];
+  if (mejor.productos_cubiertos === total) {
+    papel.append(lineaTotal("Total", euros(mejor.total)));
+    papel.appendChild(sello("Compra aquí", mejor.supermercado));
+  } else {
+    // Sellar al que cubre la mitad sería recomendar una compra que no se puede
+    // hacer. Se dice lo que hay y no se sella nada.
+    const aviso = document.createElement("p");
+    aviso.className = "aviso-cobertura";
+    aviso.textContent =
+      `Ningún supermercado tiene precios de los ${total} productos. ` +
+      `${mejor.supermercado} es el que más cubre (${mejor.productos_cubiertos}), ` +
+      "así que los totales no son comparables entre sí.";
+    papel.appendChild(aviso);
   }
 }
 
@@ -1467,14 +1608,18 @@ async function comprobarRol() {
   $("tab-admin").classList.toggle("hidden", !soyAdmin);
 }
 
-function filaCeldas(valores) {
+// `etiquetas` son los mismos rótulos de la cabecera: en móvil la fila se apila
+// como una ficha y cada dato necesita el suyo delante, porque la cabecera de la
+// tabla deja de verse (mismo patrón que las líneas del ticket).
+function filaCeldas(valores, etiquetas = []) {
   const tr = document.createElement("tr");
-  for (const valor of valores) {
+  valores.forEach((valor, i) => {
     const td = document.createElement("td");
+    if (etiquetas[i]) td.dataset.label = etiquetas[i];
     if (valor instanceof Node) td.appendChild(valor);
     else td.textContent = valor;
     tr.appendChild(td);
-  }
+  });
   return tr;
 }
 
@@ -1532,7 +1677,8 @@ function pintarAdminUsuarios() {
   const q = $("admin-q-usuarios").value.trim();
   const lista = usuariosAdmin.filter((u) => filtrar(q, [u.nombre, u.email]));
 
-  tabla.replaceChildren(cabecera(["Nombre", "Correo", "Rol", "", ""]));
+  const cols = ["Nombre", "Correo", "Rol", "", ""];
+  tabla.replaceChildren(cabecera(cols));
   const cuerpo = document.createElement("tbody");
   for (const u of lista) {
     const esAdmin = u.rol === "admin";
@@ -1541,13 +1687,10 @@ function pintarAdminUsuarios() {
     // admin). Ofrecer botones que siempre fallan sería mentir.
     if (u.id === miId) {
       cuerpo.appendChild(
-        filaCeldas([
-          u.nombre,
-          u.email,
-          u.rol,
-          "— tu cuenta, se gestiona desde tu perfil —",
-          "",
-        ]),
+        filaCeldas(
+          [u.nombre, u.email, u.rol, "— tu cuenta, se gestiona desde tu perfil —", ""],
+          cols,
+        ),
       );
       continue;
     }
@@ -1578,7 +1721,7 @@ function pintarAdminUsuarios() {
             cargarAdminUsuarios,
           ),
         ),
-      ]),
+      ], cols),
     );
   }
   tabla.appendChild(cuerpo);
@@ -1601,18 +1744,22 @@ function pintarAdminProductos() {
     filtrar(q, [p.nombre_normalizado, p.categoria, p.unidad_medida]),
   );
 
-  tabla.replaceChildren(cabecera(["Nombre", "Categoría", "Unidad", "", ""]));
+  tabla.replaceChildren(cabecera(COLS_PRODUCTO));
   const cuerpo = document.createElement("tbody");
   for (const p of lista) cuerpo.appendChild(filaProducto(p));
   tabla.appendChild(cuerpo);
   if (!lista.length) tabla.appendChild(filaCeldas(["Ningún producto con ese texto"]));
 }
 
+const COLS_PRODUCTO = ["Nombre", "Categoría", "Unidad", "", ""];
+
 function filaProducto(p) {
   return filaCeldas([
     p.nombre_normalizado,
-    p.categoria || "—",
-    p.unidad_medida || "—",
+    // Vacio y no "—": en movil la celda vacia desaparece en vez de gastar un
+    // renglon entero para decir que no hay dato.
+    p.categoria || "",
+    p.unidad_medida || "",
     boton("Editar", "sec", (e) => {
       e.target.closest("tr").replaceWith(filaProductoEditable(p));
     }),
@@ -1623,7 +1770,7 @@ function filaProducto(p) {
         cargarAdminProductos,
       ),
     ),
-  ]);
+  ], COLS_PRODUCTO);
 }
 
 // Se edita en la propia fila: abrir otra pantalla para cambiar tres campos
@@ -1665,7 +1812,7 @@ function filaProductoEditable(p) {
       }
     }),
     boton("Cancelar", "sec", () => fila.replaceWith(filaProducto(p))),
-  ]);
+  ], COLS_PRODUCTO);
   return fila;
 }
 
@@ -1674,11 +1821,13 @@ $("admin-q-productos").addEventListener("input", pintarAdminProductos);
 async function cargarAdminSupers() {
   const supers = await api("/supermercados");
   const tabla = $("tabla-supermercados");
-  tabla.replaceChildren(cabecera(["Nombre", "", ""]));
+  tabla.replaceChildren(cabecera(COLS_SUPER));
   const cuerpo = document.createElement("tbody");
   for (const sm of supers) cuerpo.appendChild(filaSuper(sm));
   tabla.appendChild(cuerpo);
 }
+
+const COLS_SUPER = ["Nombre", "", ""];
 
 function filaSuper(sm) {
   return filaCeldas([
@@ -1693,7 +1842,7 @@ function filaSuper(sm) {
         cargarAdminSupers,
       ),
     ),
-  ]);
+  ], COLS_SUPER);
 }
 
 function filaSuperEditable(sm) {
@@ -1721,7 +1870,7 @@ function filaSuperEditable(sm) {
       }
     }),
     boton("Cancelar", "sec", () => fila.replaceWith(filaSuper(sm))),
-  ]);
+  ], COLS_SUPER);
   return fila;
 }
 

@@ -166,6 +166,10 @@ main {
   display: grid;
   gap: var(--sp-4);
 }
+/* Lo mismo que en los formularios: un hijo de grid tiene min-width:auto y crece
+   hasta caber su contenido, asi que una tabla ancha estiraba la pagina entera
+   en vez de scrollear dentro de su .tabla-scroll. */
+main > * { min-width: 0; }
 
 /* ============================================================
    3. Primitivas de ticket
@@ -281,6 +285,13 @@ main {
   border-top: 2px solid transparent;
 }
 .tab .icono { font-size: 1.15rem; line-height: 1; }
+/* Con seis pestañas, "PRODUCTOS" a 0.6875rem ya no cabe en un movil estrecho y
+   la barra desbordaba. Se aprieta la letra ahi y solo ahi: el rotulo entero
+   sigue leyendose, que es mejor que recortarlo con puntos suspensivos. */
+@media (max-width: 26em) {
+  .tab { font-size: 0.625rem; letter-spacing: 0.02em; padding: var(--sp-2) 2px; }
+  .tab .icono { font-size: 1rem; }
+}
 .tab[aria-selected="true"] {
   color: var(--barra-texto);
   border-top-color: var(--barra-texto);
@@ -359,20 +370,22 @@ input::placeholder { color: var(--tinta-media); }
    empujarlo: si el formulario diera un salto con cada tecla, no habria forma de
    leer lo que se esta escribiendo. */
 .buscador { position: relative; }
+/* Papel, no una caja flotante con sombra: aqui las separaciones son rayas
+   discontinuas. La sombra se queda solo para despegarla de lo que tapa. */
 .sugerencias {
   position: absolute;
   z-index: 5;
   top: 100%;
   left: 0;
   right: 0;
-  margin: 2px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
   max-height: 15rem;
   overflow-y: auto;
   background: var(--papel);
-  border: 1px solid var(--tinta-media);
-  border-radius: var(--radio);
+  border: 1px solid var(--tinta);
+  border-top: none;
   box-shadow: var(--sombra);
 }
 .sugerencias li {
@@ -382,7 +395,9 @@ input::placeholder { color: var(--tinta-media); }
   min-height: 44px;
   padding: var(--sp-2) var(--sp-3);
   cursor: pointer;
+  border-top: 1px dashed var(--tinta-tenue);
 }
+.sugerencias li:first-child { border-top: none; }
 /* La resaltada por teclado y la de debajo del raton se ven igual: son lo mismo
    para quien mira. */
 .sugerencias li.marcada,
@@ -473,6 +488,72 @@ input::placeholder { color: var(--tinta-media); }
   word-break: break-all;
 }
 
+/* -- Lista de la compra --
+   El otro papel del oficio. El ticket lo imprime la maquina cuando vuelves; la
+   lista la escribes tu antes de ir, y por eso es la unica superficie que NO
+   lleva dentado ni sello: son renglones, separados por la misma raya
+   discontinua que usa el resto del impreso. */
+.lista-compra {
+  list-style: none;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+}
+.renglon {
+  padding: var(--sp-3) 0;
+  border-top: 1px dashed var(--tinta-tenue);
+}
+.renglon:first-child { border-top: none; }
+.renglon-cabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.renglon-nombre {
+  font-family: var(--mono);
+  font-size: var(--txt-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+}
+/* Donde comprarlo, de mas barato a mas caro. Envuelve en movil en vez de
+   desbordar: son pocos supermercados y caben en dos renglones. */
+.renglon-precios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  margin: var(--sp-1) 0 0;
+}
+.precio-sm {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  /* En mayuscula como en las tablas: la misma marca no puede leerse LIDL en un
+     sitio y Lidl en el de al lado. */
+  text-transform: uppercase;
+  font-size: var(--txt-sm);
+  color: var(--tinta-media);
+  white-space: nowrap;
+}
+/* El mas barato con tinta, no con fondo: mismo criterio que la fila ganadora. */
+.precio-sm.gana { color: var(--verde); font-weight: 700; }
+.renglon-precios.sin-precio {
+  font-family: inherit;
+  font-size: var(--txt-xs);
+  color: var(--tinta-media);
+}
+/* Quitar es una accion menor y no debe pesar como el buscador. */
+.renglon .quitar {
+  font-size: var(--txt-xs);
+  padding: var(--sp-1) var(--sp-2);
+  flex-shrink: 0;
+}
+/* Cuando ningun supermercado lo cubre todo no hay sello, hay explicacion. */
+.aviso-cobertura {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--txt-xs);
+  color: var(--tinta-media);
+}
+
 /* Panel de admin: los botones viven dentro de las filas de una tabla, asi que
    no pueden ocupar como los de un formulario. Se mantiene el objetivo tactil de
    44 px y se aprieta solo lo horizontal, como ya hace la cabecera. */
@@ -482,6 +563,44 @@ input::placeholder { color: var(--tinta-media); }
   white-space: nowrap;
 }
 #panel-admin td { vertical-align: middle; }
+#panel-admin th + th,
+#panel-admin td + td { padding-left: var(--sp-3); }
+
+/* En movil, cada fila se apila como una ficha, igual que las lineas del ticket:
+   una tabla de cinco columnas con dos botones dentro no cabe. Dejarla scrollear
+   de lado era peor que aplastarla, porque lo que quedaba fuera de pantalla eran
+   justo los botones de accion. */
+#panel-admin thead { display: none; }
+#panel-admin tbody tr {
+  display: block;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px dashed var(--tinta-tenue);
+}
+#panel-admin tbody tr:last-child { border-bottom: none; }
+#panel-admin td {
+  display: block;
+  border: none;
+  padding: var(--sp-1) 0;
+}
+#panel-admin td + td { padding-left: 0; }
+/* Un dato que no tiene valor no merece un renglon con su rotulo delante. */
+#panel-admin td:empty { display: none; }
+/* Las celdas de accion (las unicas sin rotulo) van en la misma linea, no una
+   debajo de otra: son dos botones, no dos datos. */
+#panel-admin tbody td:not([data-label]) {
+  display: inline-block;
+  padding-right: var(--sp-2);
+}
+#panel-admin td[data-label]::before {
+  content: attr(data-label);
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  color: var(--tinta-media);
+}
 /* El filtro de cada tabla, separado de ella. */
 #panel-admin input[type="search"] { margin-bottom: var(--sp-3); }
 
@@ -625,6 +744,14 @@ tr:last-child td { border-bottom: none; }
 .recibo-tabla td:first-child {
   font-family: var(--mono);
   text-transform: uppercase;
+  font-size: var(--txt-sm);
+}
+/* Las columnas de en medio (el "donde" del duelo, la cobertura de la lista)
+   tambien son datos de maquina: sin esto salian en la tipografia del cuerpo y
+   la misma marca aparecia como LIDL en una tabla y Lidl en la de al lado. */
+.recibo-tabla td:not(:first-child) {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: var(--txt-sm);
 }
 /* La fila ganadora se marca con tinta, no con fondo de color: en un ticket no
@@ -973,6 +1100,14 @@ body.sin-sesion main { padding-bottom: var(--sp-6); }
   .tab:focus-visible { outline-offset: -3px; }
 
   #mensaje { bottom: var(--sp-5); }
+
+  /* Con sitio, las fichas del panel vuelven a ser una tabla de verdad. */
+  #panel-admin thead { display: table-header-group; }
+  #panel-admin tbody tr { display: table-row; padding: 0; border-bottom: none; }
+  #panel-admin td { display: table-cell; white-space: nowrap; }
+  #panel-admin td + td { padding-left: var(--sp-3); }
+  #panel-admin td:empty { display: table-cell; }
+  #panel-admin td[data-label]::before { content: none; }
 
   #tabla-lineas thead { display: table-header-group; }
   #tabla-lineas tr { display: table-row; padding: 0; }

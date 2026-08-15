@@ -9,8 +9,24 @@ cada línea y comparar el precio de un producto entre supermercados.
 
 ## Pestañas
 
-`Subir` · `Tickets` · `Productos` · `Cesta` · `Admin` (esta última solo si
-`GET /auth/me` dice que el rol es `admin`).
+`Subir` · `Tickets` · `Productos` · `Lista` · `Cesta` · `Admin` (esta última solo
+si `GET /auth/me` dice que el rol es `admin`). Con seis, los rótulos se aprietan
+por debajo de 26em o la barra desborda en un móvil estrecho.
+
+**Lista de la compra** es el otro papel del oficio: el ticket lo imprime la
+máquina cuando vuelves, la lista la escribes tú antes de ir. Por eso la lista es
+la única superficie que **no** lleva borde dentado ni sello —son renglones
+separados por raya discontinua— y el veredicto de debajo sí: ese lo emite la
+máquina. Cada renglón lleva dónde comprarlo de más barato a más caro, con el
+primero marcado.
+
+La lista **vive en el navegador**; `POST /cesta/lista` la recibe entera y no la
+guarda. Se pierde al recargar, que es aceptable para algo de un rato; si algún
+día molesta, `localStorage` es el sitio.
+
+Cuando **ningún supermercado cubre todos los productos no se sella nada** y se
+explica por qué: sellar «compra aquí» sobre quien tiene la mitad sería recomendar
+una compra que no se puede hacer, y los totales dejan de ser comparables.
 
 **Productos** sustituyó al antiguo «Comparar precios», que era un `<select>` con el
 catálogo entero. Ahora es un buscador que sugiere según se escribe, preguntando al

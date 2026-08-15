@@ -27,6 +27,9 @@
     <button class="tab" role="tab" data-panel="panel-productos" aria-selected="false">
       <span class="icono" aria-hidden="true">⇅</span>Productos
     </button>
+    <button class="tab" role="tab" data-panel="panel-lista" aria-selected="false">
+      <span class="icono" aria-hidden="true">✓</span>Lista
+    </button>
     <button class="tab" role="tab" data-panel="panel-cesta" aria-selected="false">
       <span class="icono" aria-hidden="true">∑</span>Cesta
     </button>
@@ -256,12 +259,49 @@
           </div>
 
           <div class="fila">
-            <button id="btn-comparar-otro" type="button" disabled>Comparar con otro</button>
-            <button id="btn-quitar-b" type="button" class="sec hidden">Quitar</button>
+            <!-- Secundarias las dos: la acción principal de este panel es
+                 buscar, y la tinta sólida está reservada a la barra de
+                 pestañas. Antes eran el elemento más ruidoso de la pantalla. -->
+            <button id="btn-comparar-otro" type="button" class="sec" disabled>Comparar con otro</button>
+            <button id="btn-quitar-b" type="button" class="ghost hidden">Quitar el segundo</button>
           </div>
         </div>
         <!-- El resultado se imprime aquí como un ticket (ver pintarProductos). -->
         <div id="resultado-precios"></div>
+      </div>
+
+      <!-- Lista de la compra. Es el otro papel del oficio: el ticket lo imprime
+           la máquina cuando vuelves, la lista la escribes tú antes de ir. Por
+           eso la lista NO lleva borde dentado (no es papel emitido) y el
+           veredicto de abajo sí. -->
+      <div class="panel hidden" id="panel-lista" role="tabpanel">
+        <div class="card">
+          <h2>Lista de la compra</h2>
+          <p class="muted">Apunta lo que necesitas y te digo dónde sale mejor comprarlo todo.</p>
+
+          <div class="campo buscador">
+            <label for="busca-lista">Añadir producto</label>
+            <input type="search" id="busca-lista" autocomplete="off"
+                   placeholder="escribe para buscar…"
+                   role="combobox" aria-expanded="false" aria-controls="sug-lista"
+                   aria-autocomplete="list">
+            <ul class="sugerencias hidden" id="sug-lista" role="listbox"
+                aria-label="Sugerencias"></ul>
+          </div>
+
+          <!-- La lista escrita a mano: renglones separados por raya
+               discontinua, sin cajas. Cada renglón lleva debajo dónde comprarlo,
+               de más barato a más caro. -->
+          <ul class="lista-compra" id="lista-compra" aria-label="Tu lista"></ul>
+
+          <p class="vacio" id="lista-vacia">Tu lista está vacía. Busca un producto y añádelo.</p>
+
+          <div class="fila">
+            <button id="btn-vaciar-lista" type="button" class="ghost hidden">Vaciar lista</button>
+          </div>
+        </div>
+        <!-- El veredicto, impreso como un ticket (ver mostrarDondeComprar). -->
+        <div id="resultado-lista"></div>
       </div>
 
       <div class="panel hidden" id="panel-cesta" role="tabpanel">
