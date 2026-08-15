@@ -604,8 +604,13 @@ sudo ./scripts/backup-db.sh prod
 sudo ./scripts/verificar-backup.sh                    # el más reciente
 sudo ./scripts/verificar-backup.sh backups/xxx.sql.gz # uno concreto
 
-# EN LOCAL: se trae las copias fuera del servidor.
+# EN LOCAL: se trae las copias fuera del servidor. Lo hace launchd solo cada
+# día; esto es para lanzarlo a mano.
 ./scripts/traer-backups.sh
+
+# EN LOCAL, una vez: programa esa copia diaria en este Mac.
+./scripts/instalar-copia-local.sh
+./scripts/instalar-copia-local.sh --quitar   # para desmontarla
 ```
 
 **Por qué hace falta cada uno:**
@@ -623,13 +628,39 @@ sudo ./scripts/verificar-backup.sh backups/xxx.sql.gz # uno concreto
   restaurar también los antiguos, creando los roles que el volcado menciona.
 - **Las copias viven en el mismo disco que la base.** Si se pierde la máquina
   se pierden las dos cosas a la vez, y este servidor ya entró en modo rescate
-  una vez sin que se sepa por qué. `traer-backups.sh` se las trae a tu portátil.
-  Hasta que eso esté automatizado (Storage Box de Hetzner, rclone…), **hay que
-  acordarse de ejecutarlo**.
+  una vez sin que se sepa por qué. `traer-backups.sh` se las trae a tu portátil,
+  y desde el 2026-08-15 **lo lanza launchd todos los días** (13:30 y al iniciar
+  sesión) en vez de depender de que te acuerdes.
+- **Un fallo de madrugada no lo lee nadie.** `backup-db.sh` y `traer-backups.sh`
+  avisan por correo (`scripts/avisar.sh`, con la `RESEND_API_KEY` que ya estaba
+  en el `.env`) en vez de dejar el problema en un log. En el Mac, además, sale
+  una notificación del sistema, que no necesita credenciales.
+- **Y la copia puede ir bien estando todo roto**: si el cron del servidor deja
+  de generar volcados, aquí se copiaría lo viejo una y otra vez sin que nada
+  chirriara. Por eso `traer-backups.sh` falla si lo más reciente pasa de
+  `HORAS_MAXIMAS` (48 por defecto). Esa es la comprobación que de verdad cubre
+  el fallo silencioso.
 
 La retención pasó de 7 a **30 días**: un volcado ocupa unos KB y el disco son
 40 GB, así que apretarla no ahorraba nada y dejaba sin copia sana cualquier
 corrupción detectada con más de una semana de retraso.
+
+### La copia diaria en el Mac: lo que la rompe
+
+- **macOS no deja que launchd lea `~/Documents`** (TCC): un agente que apunte al
+  script dentro del repo falla con `Operation not permitted`. Por eso
+  `instalar-copia-local.sh` **copia** los scripts a
+  `~/Library/Application Support/supercomparateca` y launchd ejecuta esa copia.
+  Si cambias el script en el repo, **vuelve a ejecutar el instalador**.
+- **La clave SSH tiene passphrase y el agente se vacía al reiniciar.** Sin
+  `UseKeychain yes` en `~/.ssh/config`, la copia funciona hasta el próximo
+  arranque y luego muere. El instalador lo comprueba **sin agente** a propósito
+  (`env -u SSH_AUTH_SOCK`): mirar la sesión de ahora daría por bueno un montaje
+  que se rompe en el siguiente reinicio.
+- **Solo corre con el Mac encendido.** Es el precio de no guardar ninguna
+  credencial en el servidor: quien lo comprometa no puede borrar también las
+  copias de fuera. Si el portátil pasa días apagado, el aviso de antigüedad
+  salta en cuanto vuelva.
 
 ## ⚠️ Despliegue de la migración `01233e7e156c` (una sola vez)
 

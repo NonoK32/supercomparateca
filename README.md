@@ -76,9 +76,13 @@ modificar o borrar productos y supermercados, que son compartidos por todos.
   ```
 
 - **Scripts de operación** ([`scripts/`](scripts/)): `backup-db.sh` (backup de
-  PostgreSQL con retención, para cron), `healthcheck.sh` (monitorización),
-  `deploy.sh` (despliegue/actualización) y `verificar-dns.sh` (comprueba que el
-  dominio ya apunta al servidor **antes** de pedir el certificado).
+  PostgreSQL con retención, para cron), `verificar-backup.sh` (lo restaura en un
+  PostgreSQL desechable: un backup que nunca se ha restaurado es un fichero, no
+  un backup), `traer-backups.sh` + `instalar-copia-local.sh` (copia diaria fuera
+  del servidor, vía launchd), `avisar.sh` (avisos por correo cuando algo de eso
+  falla de madrugada), `healthcheck.sh` (monitorización), `deploy.sh`
+  (despliegue/actualización) y `verificar-dns.sh` (comprueba que el dominio ya
+  apunta al servidor **antes** de pedir el certificado).
 
 ## Roadmap (fases)
 

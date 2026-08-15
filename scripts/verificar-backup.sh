@@ -54,16 +54,27 @@ docker run --rm -d --name "$CONTENEDOR" \
   -e POSTGRES_DB=verificacion \
   "$IMAGEN" >/dev/null
 
-for intento in $(seq 1 30); do
-  if docker exec "$CONTENEDOR" pg_isready -U postgres -d verificacion >/dev/null 2>&1; then
+# La imagen de postgres levanta un servidor TEMPORAL para inicializar la base y
+# lo APAGA antes de arrancar el definitivo. `pg_isready` contesta que si tambien
+# durante esa fase, asi que el psql de justo despues se encontraba el socket
+# recien retirado y el script cantaba "el backup NO se puede restaurar" con un
+# backup perfectamente sano. Es la alarma mas cara que puede dar esto, asi que
+# se espera a que el init termine y solo entonces se sondea con una consulta de
+# verdad, no con pg_isready.
+listo=0
+for intento in $(seq 1 60); do
+  if docker logs "$CONTENEDOR" 2>&1 | grep -q "PostgreSQL init process complete" \
+     && docker exec "$CONTENEDOR" psql -U postgres -d verificacion -Atc 'select 1' >/dev/null 2>&1; then
+    listo=1
     break
-  fi
-  if [ "$intento" = "30" ]; then
-    echo "El PostgreSQL temporal no ha arrancado en 30 s."
-    exit 1
   fi
   sleep 1
 done
+if [ "$listo" -ne 1 ]; then
+  echo "El PostgreSQL temporal no ha arrancado en 60 s."
+  docker logs "$CONTENEDOR" 2>&1 | tail -10
+  exit 1
+fi
 
 # Los volcados anteriores al 2026-08-06 se hicieron sin --no-owner, asi que
 # llevan dentro "OWNER TO <rol>" y no restauran si ese rol no existe. Se crean

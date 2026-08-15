@@ -24,6 +24,24 @@ if [ "${1:-}" = "prod" ]; then
   compose_files+=(-f docker-compose.prod.yml)
 fi
 
+# Un backup que falla a las 3:00 solo deja una linea en backup.log, y ese
+# fichero no lo abre nadie hasta el dia que hay que restaurar. Se avisa por
+# correo (scripts/avisar.sh usa la RESEND_API_KEY que ya esta en el .env).
+abortar() {
+  echo "FALLO: $1"
+  ./scripts/avisar.sh "El backup de la base de datos ha fallado" \
+    "$1
+
+Servidor: $(hostname)
+Fecha:    $(date '+%Y-%m-%d %H:%M:%S %Z')
+
+No se ha creado ningun backup nuevo. El ultimo bueno sigue siendo el anterior,
+asi que cada dia que pase sin arreglarlo son datos que solo estan en la base.
+
+Mirar:  sudo tail -20 $(pwd)/backups/backup.log" || true
+  exit 1
+}
+
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
 # 30 dias, no 7: un volcado de esta base ocupa unos pocos KB y el disco son
 # 40 GB, asi que apretar la retencion no ahorra nada. Lo que si cuesta caro es
@@ -49,8 +67,7 @@ echo "Volcando la base de datos '$POSTGRES_DB'..."
 if ! docker compose "${compose_files[@]}" exec -T db \
     pg_dump --no-owner --no-acl -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > "$parcial"; then
   rm -f "$parcial"
-  echo "FALLO: pg_dump no ha terminado. No se ha creado ningun backup."
-  exit 1
+  abortar "pg_dump no ha terminado. No se ha creado ningun backup."
 fi
 
 # Que el fichero exista no significa que lleve datos dentro. Se cuentan las
@@ -66,9 +83,8 @@ filas="$(gzip -dc "$parcial" | awk '
 
 if [ "$filas" -eq 0 ]; then
   rm -f "$parcial"
-  echo "FALLO: el volcado no contiene ninguna fila. No se guarda como backup."
-  echo "La base de datos esta vacia o pg_dump no ha visto los datos."
-  exit 1
+  abortar "el volcado no contiene ninguna fila. No se guarda como backup.
+La base de datos esta vacia o pg_dump no ha visto los datos."
 fi
 
 mv "$parcial" "$destino"
