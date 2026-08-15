@@ -354,6 +354,40 @@ input::placeholder { color: var(--tinta-media); }
 
 /* Etiqueta de campo del impreso: rotulo corto en versalitas sobre el hueco. */
 .campo { display: grid; gap: var(--sp-1); }
+
+/* Buscador con sugerencias. La lista se superpone al contenido en vez de
+   empujarlo: si el formulario diera un salto con cada tecla, no habria forma de
+   leer lo que se esta escribiendo. */
+.buscador { position: relative; }
+.sugerencias {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 15rem;
+  overflow-y: auto;
+  background: var(--papel);
+  border: 1px solid var(--tinta-media);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+}
+.sugerencias li {
+  display: flex;
+  align-items: center;
+  /* Objetivo tactil, igual que los demas controles. */
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+}
+/* La resaltada por teclado y la de debajo del raton se ven igual: son lo mismo
+   para quien mira. */
+.sugerencias li.marcada,
+.sugerencias li:hover { background: var(--papel-alt); }
+.sugerencias .sin-resultados { color: var(--tinta-media); cursor: default; }
 .campo > label {
   font-family: var(--mono);
   font-size: var(--txt-xs);
@@ -411,10 +445,84 @@ input::placeholder { color: var(--tinta-media); }
   letter-spacing: var(--track);
 }
 .zona-pista { font-size: var(--txt-xs); color: var(--tinta-media); }
-.foto-previa {
-  max-height: 180px;
+/* Las paginas elegidas, en tira y en orden: un ticket largo son varias fotos
+   del mismo papel, y verlas juntas es lo que deja comprobar que no falta un
+   trozo antes de gastar una pasada de OCR. */
+.capturas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2);
+  max-width: 100%;
+}
+.captura img {
+  display: block;
+  max-height: 120px;
   max-width: 100%;
   border: 1px solid var(--tinta-tenue);
+}
+/* De un PDF no hay miniatura que ensenar, asi que va el nombre. Raya
+   discontinua, como los demas huecos rellenables del impreso. */
+.captura-pdf {
+  font-family: var(--mono);
+  font-size: var(--txt-xs);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px dashed var(--tinta-tenue);
+  border-radius: var(--radio);
+  background: var(--papel-alt);
+  word-break: break-all;
+}
+
+/* Panel de admin: los botones viven dentro de las filas de una tabla, asi que
+   no pueden ocupar como los de un formulario. Se mantiene el objetivo tactil de
+   44 px y se aprieta solo lo horizontal, como ya hace la cabecera. */
+#panel-admin td button {
+  font-size: var(--txt-xs);
+  padding: var(--sp-1) var(--sp-2);
+  white-space: nowrap;
+}
+#panel-admin td { vertical-align: middle; }
+/* El filtro de cada tabla, separado de ella. */
+#panel-admin input[type="search"] { margin-bottom: var(--sp-3); }
+
+/* Elegir entre subir un archivo o escanear en vivo. Las dos en tinta hueca a
+   proposito: la unica superficie de tinta solida es la barra de pestanas (esa
+   es la maquina; esto sigue siendo papel). La activa se marca rellenando el
+   hueco y cerrando el borde, como un campo del impreso ya escrito. El estado
+   se lee de aria-pressed y no de una clase paralela, para que lo que ve el
+   lector de pantalla y lo que se pinta no puedan separarse. */
+.modos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.modos .modo { flex: 1 1 12rem; }
+.modos .modo[aria-pressed="true"] {
+  background: var(--papel-alt);
+  border-color: var(--tinta);
+}
+
+/* Capturar y Terminar en la misma linea: son el mismo gesto repetido y su
+   final, no dos acciones sueltas. */
+.botones-camara { display: flex; gap: var(--sp-2); }
+.botones-camara button { flex: 1; }
+
+.zona-camara {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
+  text-align: center;
+}
+.zona-camara video {
+  width: 100%;
+  /* Un ticket es mucho mas alto que ancho: se le deja altura para encuadrarlo
+     entero, pero sin comerse la pantalla y dejar el boton fuera de vista. */
+  max-height: 60vh;
+  border: 1px solid var(--tinta-tenue);
+  border-radius: var(--radio);
+  /* Fondo mientras la camara arranca: un hueco en blanco parece un fallo. */
+  background: var(--tinta);
 }
 
 /* Mientras el OCR trabaja. Son varios segundos con la pantalla quieta, los

@@ -66,6 +66,7 @@ async function mostrarApp() {
   $("tabs").classList.remove("hidden");
   document.body.classList.remove("sin-sesion");
   try {
+    await comprobarRol();
     await cargarSupermercados();
     await cargarProductos();
     await cargarTickets();
@@ -76,6 +77,13 @@ async function mostrarApp() {
 }
 
 function mostrarAuth() {
+  // Salir de la sesión (a mano, por token caducado o al borrar la cuenta) tiene
+  // que apagar la cámara: es el punto por el que se pasa en los tres casos.
+  cerrarCamara();
+  // El siguiente que entre puede no ser admin: el tab no puede quedar puesto
+  // del anterior.
+  soyAdmin = false;
+  $("tab-admin").classList.add("hidden");
   $("vista-app").classList.add("hidden");
   $("vista-auth").classList.remove("hidden");
   $("btn-logout").classList.add("hidden");
@@ -389,10 +397,19 @@ $("btn-logout").addEventListener("click", cerrarSesion);
 // Cada botón declara el panel que muestra en data-panel. En móvil la barra va
 // fija al pie y en escritorio bajo la cabecera; eso es solo CSS.
 function activarPestana(idPanel) {
+  // Irse a otra pestaña deja de enseñar la cámara, pero no la apaga: sin esto
+  // el piloto se queda encendido con el vídeo ya fuera de la vista.
+  cerrarCamara();
   for (const tab of document.querySelectorAll(".tab")) {
     const activa = tab.dataset.panel === idPanel;
     tab.setAttribute("aria-selected", String(activa));
     $(tab.dataset.panel).classList.toggle("hidden", !activa);
+  }
+  // El panel de admin se puebla al abrirlo, no al entrar en la app: son tres
+  // peticiones que la mayoría de sesiones no llegan a usar, y así se ve el
+  // estado de ahora y no el de cuando se inició sesión.
+  if (idPanel === "panel-admin" && soyAdmin) {
+    cargarAdmin().catch((err) => mensaje(err.message, true));
   }
   // Al cambiar de pestaña se vuelve arriba: si no, se hereda el scroll de la
   // pantalla anterior y la nueva aparece empezada por la mitad.
@@ -428,48 +445,216 @@ async function cargarSupermercados() {
 const SUPER_NUEVO = "nuevo";
 
 // ---- Tickets ----
-// La foto a la espera de que el usuario conteste lo que el OCR no supo leer.
-let fotoPendiente = null;
+// Las páginas a la espera de que el usuario conteste lo que el OCR no supo
+// leer. Es una lista: un ticket largo se sube en varias capturas.
+let ticketPendiente = null;
 
-function rotularZona(archivo) {
-  $("zona-titulo").textContent = archivo ? "Ticket listo" : "Pegar aquí el ticket";
-  $("zona-pista").textContent = archivo
-    ? `${archivo.name} · toca para cambiarla`
-    : "Toca para elegir la foto · o arrástrala";
+// El mismo tope que aplica el api (routers/tickets.py). Se avisa también aquí
+// para no gastar una subida entera en un 400 que ya se veía venir.
+const MAX_ARCHIVOS = 10;
+
+// Lo que el ocr-service sabe leer: una foto, o un PDF (lleve capa de texto o
+// sea un escaneo).
+const esTicket = (archivo) =>
+  archivo.type.startsWith("image/") || archivo.type === "application/pdf";
+
+// El <input type=file> es la única lista de páginas que hay: la cámara,
+// arrastrar y soltar y el selector escriben todos ahí. Así el envío y la
+// segunda pasada del OCR no tienen que elegir de dónde leer.
+const paginasElegidas = () => Array.from($("ticket-imagen").files);
+
+function fijarPaginas(archivos) {
+  // Cambiar el FileList de un input solo se puede a través de un DataTransfer;
+  // no hay otra forma que dé el navegador.
+  const datos = new DataTransfer();
+  for (const archivo of archivos.slice(0, MAX_ARCHIVOS)) datos.items.add(archivo);
+  $("ticket-imagen").files = datos.files;
+  pintarPaginas();
 }
 
-function elegirFoto(archivo) {
-  if (!archivo) return;
-  const previa = $("foto-previa");
-  previa.src = URL.createObjectURL(archivo);
-  previa.classList.remove("hidden");
-  rotularZona(archivo);
+function pintarPaginas() {
+  const archivos = paginasElegidas();
+  const tira = $("capturas");
+  // Las miniaturas de la tanda anterior siguen ocupando memoria hasta que se
+  // revocan, y aquí se repinta en cada captura.
+  for (const img of tira.querySelectorAll("img")) URL.revokeObjectURL(img.src);
+  tira.replaceChildren();
+  tira.classList.toggle("hidden", archivos.length === 0);
+
+  archivos.forEach((archivo, i) => {
+    const pagina = document.createElement("span");
+    pagina.className = "captura";
+    if (archivo.type.startsWith("image/")) {
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(archivo);
+      img.alt = `Página ${i + 1} de ${archivos.length}`;
+      pagina.appendChild(img);
+    } else {
+      // Un <img> no sabe pintar un PDF: se enseña el nombre y ya.
+      pagina.classList.add("captura-pdf");
+      pagina.textContent = archivo.name;
+    }
+    tira.appendChild(pagina);
+  });
+  rotularZona(archivos);
+}
+
+function rotularZona(archivos) {
+  const n = archivos.length;
+  $("zona-titulo").textContent = n ? "Ticket listo" : "Pegar aquí el ticket";
+  $("zona-pista").textContent =
+    n === 0
+      ? "Toca para elegir las fotos o el PDF · o arrástralos"
+      : n === 1
+        ? `${archivos[0].name} · toca para cambiarlo`
+        : `${n} páginas · toca para cambiarlas`;
 }
 
 // El OCR tarda varios segundos con la pantalla quieta: sin decir nada, eso se
 // lee como que la página se ha colgado. Se dice qué está pasando y se deja de
 // admitir otra foto mientras tanto.
-function marcarLeyendo(activo) {
+function marcarLeyendo(activo, paginas = 0) {
   $("zona-foto").classList.toggle("leyendo", activo);
   if (!activo) return;
   $("zona-titulo").textContent = "Leyendo el ticket…";
-  $("zona-pista").textContent = "Puede tardar unos segundos";
+  // Cada página es una pasada de OCR, así que con varias la espera se multiplica
+  // y conviene decirlo en vez de dejar que parezca que se ha atascado.
+  $("zona-pista").textContent =
+    paginas > 1 ? `${paginas} páginas · esto tarda un poco` : "Puede tardar unos segundos";
 }
 
-function olvidarFoto() {
+function olvidarTicket() {
+  // reset() vacía el input, y el repintado suelta las miniaturas.
   $("form-ticket").reset();
-  const previa = $("foto-previa");
-  // El objeto de la previsualización se queda en memoria hasta que se revoca.
-  URL.revokeObjectURL(previa.src);
-  previa.src = "";
-  previa.classList.add("hidden");
-  rotularZona(null);
+  pintarPaginas();
 }
 
-$("ticket-imagen").addEventListener("change", (e) => elegirFoto(e.target.files[0]));
+$("ticket-imagen").addEventListener("change", () => {
+  const archivos = paginasElegidas();
+  if (archivos.length > MAX_ARCHIVOS) {
+    mensaje(`Como mucho ${MAX_ARCHIVOS} páginas por ticket; me quedo con las primeras`, true);
+    fijarPaginas(archivos); // recorta al tope
+    return;
+  }
+  pintarPaginas();
+});
+
+// ---- Escanear con la cámara ----
+// Es otra forma de elegir las páginas, no otro camino de subida: cada fotograma
+// capturado se añade al mismo <input type=file> y de ahí en adelante todo es
+// idéntico a unas fotos elegidas a mano. Así el envío, las miniaturas y la
+// segunda pasada del OCR siguen teniendo un único sitio del que leer el ticket.
+let flujoCamara = null;
+
+function mostrarModo(modo) {
+  const enCamara = modo === "camara";
+  $("modo-archivo").setAttribute("aria-pressed", String(!enCamara));
+  $("modo-camara").setAttribute("aria-pressed", String(enCamara));
+  $("zona-foto").classList.toggle("hidden", enCamara);
+  $("zona-camara").classList.toggle("hidden", !enCamara);
+  $("botones-camara").classList.toggle("hidden", !enCamara);
+  // Con la cámara abierta no hay nada que procesar todavía: primero se captura
+  // lo que haga falta, se ven las páginas, y entonces se envía.
+  $("btn-procesar").classList.toggle("hidden", enCamara);
+}
+
+// Con la cámara abierta no se ven las miniaturas, así que si no se dice por
+// dónde va uno, no hay forma de saberlo.
+function rotularCamara() {
+  const n = paginasElegidas().length;
+  $("camara-pista").textContent =
+    n === 0
+      ? "Encuadra el ticket entero y pulsa Capturar"
+      : `${n} página${n > 1 ? "s" : ""} · sigue por donde se cortó, o pulsa Terminar`;
+  $("btn-terminar-camara").disabled = n === 0;
+}
+
+async function abrirCamara() {
+  mostrarModo("camara");
+  rotularCamara();
+  try {
+    flujoCamara = await navigator.mediaDevices.getUserMedia({
+      // La trasera es la que enfoca el ticket. En un portátil no existe, y por
+      // eso `ideal` y no `exact`: con `exact` fallaría en vez de coger la que
+      // haya.
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 } },
+    });
+  } catch (err) {
+    mostrarModo("archivo");
+    mensaje(
+      err.name === "NotAllowedError"
+        ? "No has dado permiso para usar la cámara"
+        : "No he podido abrir la cámara. Sube una foto o un PDF.",
+      true,
+    );
+    return;
+  }
+  const video = $("camara-video");
+  video.srcObject = flujoCamara;
+  await video.play();
+}
+
+// El piloto de la cámara sigue encendido hasta que se paran las pistas: hay que
+// cerrarla en cuanto deja de verse, no solo al capturar.
+function cerrarCamara() {
+  for (const pista of flujoCamara ? flujoCamara.getTracks() : []) pista.stop();
+  flujoCamara = null;
+  $("camara-video").srcObject = null;
+}
+
+function capturar() {
+  const video = $("camara-video");
+  if (!video.videoWidth) {
+    mensaje("La cámara todavía está arrancando", true);
+    return;
+  }
+  const lienzo = document.createElement("canvas");
+  // Al tamaño real de la cámara, no al que se ve en pantalla: la letra de un
+  // ticket es pequeña y el OCR necesita todos los píxeles que haya.
+  lienzo.width = video.videoWidth;
+  lienzo.height = video.videoHeight;
+  lienzo.getContext("2d").drawImage(video, 0, 0);
+  lienzo.toBlob(
+    (blob) => {
+      const yaHay = paginasElegidas();
+      if (yaHay.length >= MAX_ARCHIVOS) {
+        mensaje(`Ya van ${MAX_ARCHIVOS} páginas, que es el máximo por ticket`, true);
+        return;
+      }
+      const foto = new File([blob], `ticket-${Date.now()}.jpg`, { type: "image/jpeg" });
+      // Se añade, no sustituye: son trozos del mismo papel. Y la cámara sigue
+      // abierta, porque encadenar la página siguiente sin esperar otra vez a
+      // que arranque es justo el motivo de que esto exista.
+      fijarPaginas([...yaHay, foto]);
+      rotularCamara();
+    },
+    "image/jpeg",
+    // La letra de un ticket se emborrona en cuanto el JPEG aprieta, y ahí es
+    // donde el OCR empieza a perder los decimales de los precios.
+    0.92,
+  );
+}
+
+// Sin getUserMedia el botón no llega a pintarse. No es solo cosa de navegadores
+// viejos: en un http:// que no sea localhost tampoco existe.
+if (navigator.mediaDevices?.getUserMedia) {
+  $("modo-camara").classList.remove("hidden");
+}
+$("modo-archivo").addEventListener("click", () => {
+  cerrarCamara();
+  mostrarModo("archivo");
+});
+$("modo-camara").addEventListener("click", abrirCamara);
+$("btn-capturar").addEventListener("click", capturar);
+// Terminar: se apaga la cámara y se pasa a ver las páginas capturadas, que es
+// donde se comprueba que no falta un trozo antes de gastar el OCR.
+$("btn-terminar-camara").addEventListener("click", () => {
+  cerrarCamara();
+  mostrarModo("archivo");
+});
 
 // Arrastrar y soltar en escritorio. Se asigna al input de verdad (vía
-// DataTransfer) para no llevar la cuenta del archivo por otro lado.
+// DataTransfer) para no llevar la cuenta de los archivos por otro lado.
 const zona = $("zona-foto");
 for (const evento of ["dragenter", "dragover"]) {
   zona.addEventListener(evento, (e) => {
@@ -482,42 +667,48 @@ for (const evento of ["dragleave", "drop"]) {
 }
 zona.addEventListener("drop", (e) => {
   e.preventDefault();
-  const archivo = e.dataTransfer.files[0];
-  if (!archivo || !archivo.type.startsWith("image/")) {
-    mensaje("Eso no parece una imagen", true);
+  // Se cuelan cosas que no son tickets al arrastrar una carpeta entera; se
+  // filtran en vez de rechazar el lote.
+  const archivos = Array.from(e.dataTransfer.files).filter(esTicket);
+  if (!archivos.length) {
+    mensaje("Eso no parece un ticket: arrastra fotos o un PDF", true);
     return;
   }
-  $("ticket-imagen").files = e.dataTransfer.files;
-  elegirFoto(archivo);
+  if (archivos.length > MAX_ARCHIVOS) {
+    mensaje(`Como mucho ${MAX_ARCHIVOS} páginas por ticket; me quedo con las primeras`, true);
+  }
+  fijarPaginas(archivos);
 });
 
 $("form-ticket").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const archivo = $("ticket-imagen").files[0];
-  if (!archivo) {
-    mensaje("Elige la foto del ticket", true);
+  const archivos = paginasElegidas();
+  if (!archivos.length) {
+    mensaje("Elige la foto o el PDF del ticket", true);
     return;
   }
-  await procesarTicket(archivo, {}, e.target.querySelector("button[type=submit]"));
+  await procesarTicket(archivos, {}, e.target.querySelector("button[type=submit]"));
 });
 
 // El OCR es con diferencia lo más lento de la app (segundos). Sin bloquear el
 // botón se reenvía el mismo ticket dos veces creyendo que no ha hecho nada.
-async function procesarTicket(archivo, datos, btn) {
+async function procesarTicket(archivos, datos, btn) {
   const form = new FormData();
-  form.append("imagen", archivo);
+  // Todas las páginas bajo el mismo campo `imagen`: repetir el campo es como se
+  // manda una lista en multipart, y es lo que el api espera.
+  for (const archivo of archivos) form.append("imagen", archivo);
   for (const [clave, valor] of Object.entries(datos)) {
     if (valor) form.append(clave, valor);
   }
   const textoBtn = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Leyendo…";
-  marcarLeyendo(true);
+  marcarLeyendo(true, archivos.length);
   try {
     const ticket = await api("/tickets", { method: "POST", form });
-    olvidarFoto();
+    olvidarTicket();
     cerrarPreguntaDatos();
-    fotoPendiente = null;
+    ticketPendiente = null;
     await cargarTickets();
     activarPestana("panel-tickets");
     mostrarTicket(ticket);
@@ -526,7 +717,7 @@ async function procesarTicket(archivo, datos, btn) {
     // 422 con la lista de lo que falta: el ticket no se ha creado y hay que
     // preguntarlo antes de seguir.
     if (err.detail && Array.isArray(err.detail.faltan)) {
-      preguntarDatosQueFaltan(archivo, err.detail.faltan);
+      preguntarDatosQueFaltan(archivos, err.detail.faltan);
     } else {
       mensaje(err.message, true);
     }
@@ -534,24 +725,24 @@ async function procesarTicket(archivo, datos, btn) {
     btn.disabled = false;
     btn.textContent = textoBtn;
     marcarLeyendo(false);
-    // Si la foto sigue puesta (fallo, o falta un dato que preguntar), el
-    // recuadro vuelve a decir cuál es; si se procesó bien, olvidarFoto() ya lo
-    // ha dejado vacío.
-    rotularZona($("ticket-imagen").files[0] || null);
+    // Si las páginas siguen puestas (fallo, o falta un dato que preguntar), el
+    // recuadro vuelve a decir cuáles son; si se procesó bien, olvidarTicket()
+    // ya lo ha dejado vacío.
+    rotularZona(paginasElegidas());
   }
 }
 
-function preguntarDatosQueFaltan(archivo, faltan) {
-  fotoPendiente = archivo;
+function preguntarDatosQueFaltan(archivos, faltan) {
+  ticketPendiente = archivos;
   const pideSuper = faltan.includes("supermercado_id");
   const pideFecha = faltan.includes("fecha_compra");
   $("campo-super").classList.toggle("hidden", !pideSuper);
   $("campo-fecha").classList.toggle("hidden", !pideFecha);
   $("faltan-texto").textContent = pideSuper && pideFecha
-    ? "No he sabido leer el supermercado ni la fecha en la foto."
+    ? "No he sabido leer el supermercado ni la fecha en el ticket."
     : pideSuper
-      ? "No he sabido leer de qué supermercado es la foto."
-      : "No he sabido leer la fecha de compra en la foto.";
+      ? "No he sabido leer de qué supermercado es el ticket."
+      : "No he sabido leer la fecha de compra en el ticket.";
   $("card-subir").classList.add("hidden");
   $("card-faltan").classList.remove("hidden");
   (pideSuper ? $("sel-supermercado") : $("ticket-fecha")).focus();
@@ -565,9 +756,9 @@ function cerrarPreguntaDatos() {
 }
 
 $("btn-faltan-cancelar").addEventListener("click", () => {
-  fotoPendiente = null;
+  ticketPendiente = null;
   cerrarPreguntaDatos();
-  olvidarFoto();
+  olvidarTicket();
 });
 
 // Crear el supermercado desde aquí: es el único sitio donde hace falta, y con
@@ -580,7 +771,7 @@ $("sel-supermercado").addEventListener("change", () => {
 
 $("form-faltan").addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (!fotoPendiente) return;
+  if (!ticketPendiente) return;
   const datos = {};
 
   if (!$("campo-super").classList.contains("hidden")) {
@@ -619,7 +810,7 @@ $("form-faltan").addEventListener("submit", async (e) => {
   }
 
   await procesarTicket(
-    fotoPendiente,
+    ticketPendiente,
     datos,
     e.target.querySelector("button[type=submit]"),
   );
@@ -912,26 +1103,213 @@ async function cargarProductos() {
     a.nombre_normalizado.localeCompare(b.nombre_normalizado, "es"),
   );
   catalogo = productos;
-  const sel = $("sel-producto");
-  sel.innerHTML = "";
-  for (const p of productos) {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = p.nombre_normalizado;
-    sel.appendChild(opt);
-  }
 }
 
-$("btn-comparar").addEventListener("click", async () => {
-  const id = $("sel-producto").value;
-  if (!id) return;
+// ---- Buscador de productos con sugerencias ----
+// Se pregunta al api en vez de filtrar el catálogo que ya está en memoria: ese
+// se carga una vez al entrar y se queda viejo en cuanto alguien confirma una
+// línea, y además crece sin tope. El servidor ya sabe buscar y limitar.
+const SUGERENCIAS = 8;
+
+// Lo seleccionado en cada buscador. `b` solo existe si se ha pedido comparar.
+const elegido = { a: null, b: null };
+
+function montarBuscador(clave) {
+  const entrada = $(`busca-${clave}`);
+  const lista = $(`sug-${clave}`);
+  let opciones = [];
+  let marcada = -1;
+  let peticion = 0;
+  let temporizador;
+
+  function cerrar() {
+    lista.classList.add("hidden");
+    lista.replaceChildren();
+    entrada.setAttribute("aria-expanded", "false");
+    entrada.removeAttribute("aria-activedescendant");
+    opciones = [];
+    marcada = -1;
+  }
+
+  function marcar(i) {
+    marcada = i;
+    [...lista.children].forEach((li, n) => {
+      const activa = n === i;
+      li.classList.toggle("marcada", activa);
+      li.setAttribute("aria-selected", String(activa));
+    });
+    if (i >= 0) {
+      entrada.setAttribute("aria-activedescendant", lista.children[i].id);
+      lista.children[i].scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  function elegir(producto) {
+    elegido[clave] = producto;
+    entrada.value = producto.nombre_normalizado;
+    cerrar();
+    pintarProductos();
+  }
+
+  async function buscar(texto) {
+    // Cada tecla lanza una petición y las respuestas pueden llegar
+    // desordenadas: se descarta todo lo que no sea la última pedida, o una
+    // búsqueda vieja repinta encima de la nueva.
+    const mia = ++peticion;
+    let productos;
+    try {
+      productos = await api(
+        `/productos?q=${encodeURIComponent(texto)}&limite=${SUGERENCIAS}`,
+      );
+    } catch (err) {
+      mensaje(err.message, true);
+      return;
+    }
+    if (mia !== peticion) return;
+
+    opciones = productos;
+    lista.replaceChildren();
+    if (!productos.length) {
+      const li = document.createElement("li");
+      li.className = "sin-resultados";
+      li.textContent = "Nada con ese nombre";
+      lista.appendChild(li);
+    } else {
+      productos.forEach((p, i) => {
+        const li = document.createElement("li");
+        li.id = `sug-${clave}-${i}`;
+        li.role = "option";
+        li.textContent = p.nombre_normalizado;
+        li.setAttribute("aria-selected", "false");
+        // mousedown y no click: el blur del input llega antes que el click y
+        // cerraría la lista justo debajo del dedo.
+        li.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          elegir(p);
+        });
+        lista.appendChild(li);
+      });
+    }
+    lista.classList.remove("hidden");
+    entrada.setAttribute("aria-expanded", "true");
+    marcar(-1);
+  }
+
+  entrada.addEventListener("input", () => {
+    const texto = entrada.value.trim();
+    // Lo escrito ya no corresponde a lo elegido: se suelta para que el
+    // resultado no siga enseñando un producto que no es el del cuadro.
+    if (elegido[clave] && texto !== elegido[clave].nombre_normalizado) {
+      elegido[clave] = null;
+      pintarProductos();
+    }
+    clearTimeout(temporizador);
+    if (!texto) {
+      cerrar();
+      return;
+    }
+    // Sin esta espera se lanza una petición por pulsación.
+    temporizador = setTimeout(() => buscar(texto), 200);
+  });
+
+  entrada.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") return cerrar();
+    if (!opciones.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      marcar((marcada + 1) % opciones.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      marcar((marcada - 1 + opciones.length) % opciones.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      // Sin nada resaltado, Enter coge la primera: es lo que espera quien
+      // escribe y pulsa Enter sin mirar.
+      elegir(opciones[marcada >= 0 ? marcada : 0]);
+    }
+  });
+
+  entrada.addEventListener("blur", () => setTimeout(cerrar, 0));
+}
+
+montarBuscador("a");
+montarBuscador("b");
+
+$("btn-comparar-otro").addEventListener("click", () => {
+  $("campo-b").classList.remove("hidden");
+  $("btn-comparar-otro").classList.add("hidden");
+  $("btn-quitar-b").classList.remove("hidden");
+  $("busca-b").focus();
+});
+
+$("btn-quitar-b").addEventListener("click", () => {
+  elegido.b = null;
+  $("busca-b").value = "";
+  $("campo-b").classList.add("hidden");
+  $("btn-quitar-b").classList.add("hidden");
+  $("btn-comparar-otro").classList.remove("hidden");
+  pintarProductos();
+});
+
+// Los precios de lo elegido. Se piden aquí y no al elegir para que el bloque
+// de comparar tenga los dos a la vez sin guardarlos por separado.
+async function pintarProductos() {
+  // Comparar no tiene sentido sin un primer producto elegido.
+  $("btn-comparar-otro").disabled = !elegido.a;
+
+  const cont = $("resultado-precios");
+  if (!elegido.a) {
+    cont.replaceChildren();
+    return;
+  }
+  let datos;
   try {
-    const data = await api(`/productos/${id}/precios`);
-    mostrarComparativa(data);
+    datos = await Promise.all(
+      [elegido.a, elegido.b]
+        .filter(Boolean)
+        .map((p) => api(`/productos/${p.id}/precios`)),
+    );
   } catch (err) {
     mensaje(err.message, true);
+    return;
   }
-});
+  cont.replaceChildren();
+  for (const data of datos) mostrarComparativa(data, { limpiar: false });
+  if (datos.length === 2) mostrarDuelo(datos);
+}
+
+// Cuál de los dos productos sale más barato, cada uno a su mejor precio. Es la
+// pregunta que se hace quien compara dos productos, y no la contesta ninguna de
+// las dos tablas por separado.
+function mostrarDuelo([uno, otro]) {
+  const mejor = (data) => data.supermercados[0];
+  if (!mejor(uno) || !mejor(otro)) return;
+
+  const papel = papelNuevo($("resultado-precios"), "Cuál sale mejor", {
+    limpiar: false,
+  });
+  const filas = [uno, otro]
+    .map((data) => ({ data, precio: Number(mejor(data).precio_actual) }))
+    .sort((x, y) => x.precio - y.precio);
+
+  papel.appendChild(
+    tablaRecibo(
+      ["Producto", "Dónde", "Precio"],
+      filas.map((f, i) => ({
+        gana: i === 0,
+        celdas: [
+          f.data.nombre_normalizado,
+          mejor(f.data).supermercado,
+          euros(mejor(f.data).precio_actual),
+        ],
+      })),
+    ),
+  );
+
+  const diferencia = filas[1].precio - filas[0].precio;
+  papel.append(raya(true), lineaTotal("Diferencia", euros(diferencia)));
+  papel.appendChild(sello("Más barato", filas[0].data.nombre_normalizado));
+}
 
 function celda(texto, clase) {
   const td = document.createElement("td");
@@ -950,8 +1328,11 @@ function euros(valor) {
 // concepto a la izquierda, importe a la derecha, doble raya antes del total.
 // No es decoración: alinear importes en columna es justo lo que hace legible
 // una comparación de precios.
-function papelNuevo(cont, titulo) {
-  cont.textContent = "";
+// `limpiar: false` para apilar varios papeles en el mismo contenedor, que es lo
+// que hace falta al comparar dos productos. Por defecto sigue sustituyendo,
+// como esperan el ticket y la cesta.
+function papelNuevo(cont, titulo, { limpiar = true } = {}) {
+  if (limpiar) cont.textContent = "";
   const papel = document.createElement("div");
   papel.className = "card recibo dentado imprimiendo";
 
@@ -1028,22 +1409,22 @@ function tablaRecibo(cabeceras, filas) {
   return wrap;
 }
 
-function vacio(cont, texto) {
-  cont.textContent = "";
+function vacio(cont, texto, { limpiar = true } = {}) {
+  if (limpiar) cont.textContent = "";
   const p = document.createElement("p");
   p.className = "vacio";
   p.textContent = texto;
   cont.appendChild(p);
 }
 
-function mostrarComparativa(data) {
+function mostrarComparativa(data, opciones = {}) {
   const cont = $("resultado-precios");
   if (!data.supermercados.length) {
-    vacio(cont, `Todavía no hay precios de «${data.nombre_normalizado}». Sube un ticket que lo incluya.`);
+    vacio(cont, `Todavía no hay precios de «${data.nombre_normalizado}». Sube un ticket que lo incluya.`, opciones);
     return;
   }
 
-  const papel = papelNuevo(cont, data.nombre_normalizado);
+  const papel = papelNuevo(cont, data.nombre_normalizado, opciones);
   // La API ordena por precio ascendente: el primero es el más barato.
   papel.appendChild(
     tablaRecibo(
@@ -1064,6 +1445,284 @@ function mostrarComparativa(data) {
     papel.append(raya(true), lineaTotal("Diferencia", euros(diferencia)));
     papel.appendChild(sello("Más barato", barato.supermercado));
   }
+}
+
+// ---- Panel de administración ----
+// Esconder el tab no protege nada: cada endpoint de admin vuelve a comprobar el
+// rol. Solo evita enseñar botones que darían 403.
+let soyAdmin = false;
+// Hace falta para no ofrecer sobre la propia fila acciones que el api rechaza
+// siempre (409): la cuenta de uno se gestiona desde su perfil.
+let miId = null;
+
+async function comprobarRol() {
+  try {
+    const yo = await api("/auth/me");
+    soyAdmin = yo.rol === "admin";
+    miId = yo.id;
+  } catch {
+    soyAdmin = false; // el 401 ya lo gestiona api()
+    miId = null;
+  }
+  $("tab-admin").classList.toggle("hidden", !soyAdmin);
+}
+
+function filaCeldas(valores) {
+  const tr = document.createElement("tr");
+  for (const valor of valores) {
+    const td = document.createElement("td");
+    if (valor instanceof Node) td.appendChild(valor);
+    else td.textContent = valor;
+    tr.appendChild(td);
+  }
+  return tr;
+}
+
+function cabecera(nombres) {
+  const thead = document.createElement("thead");
+  const tr = document.createElement("tr");
+  for (const nombre of nombres) {
+    const th = document.createElement("th");
+    th.textContent = nombre;
+    tr.appendChild(th);
+  }
+  thead.appendChild(tr);
+  return thead;
+}
+
+function boton(texto, clase, alPulsar) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = texto;
+  if (clase) b.className = clase;
+  b.addEventListener("click", alPulsar);
+  return b;
+}
+
+// Todo borrado del panel es irreversible y sobre datos de otros: se confirma.
+async function confirmando(pregunta, accion, recargar) {
+  if (!confirm(pregunta)) return;
+  try {
+    await accion();
+    await recargar();
+  } catch (err) {
+    mensaje(err.message, true);
+  }
+}
+
+async function cargarAdmin() {
+  await Promise.all([cargarAdminUsuarios(), cargarAdminProductos(), cargarAdminSupers()]);
+}
+
+// Lo que hay se filtra en el navegador y no en el api: son listas cortas (las
+// cuentas y el catálogo de una instalación), ya están pedidas, y así el filtro
+// responde sin ir y volver.
+const filtrar = (texto, campos) =>
+  campos.some((c) => (c || "").toLowerCase().includes(texto.toLowerCase()));
+
+let usuariosAdmin = [];
+
+async function cargarAdminUsuarios() {
+  usuariosAdmin = await api("/usuarios");
+  pintarAdminUsuarios();
+}
+
+function pintarAdminUsuarios() {
+  const tabla = $("tabla-usuarios");
+  const q = $("admin-q-usuarios").value.trim();
+  const lista = usuariosAdmin.filter((u) => filtrar(q, [u.nombre, u.email]));
+
+  tabla.replaceChildren(cabecera(["Nombre", "Correo", "Rol", "", ""]));
+  const cuerpo = document.createElement("tbody");
+  for (const u of lista) {
+    const esAdmin = u.rol === "admin";
+    // Sobre la propia cuenta el api contesta 409 a las dos acciones (borrarse
+    // aquí se saltaría la contraseña, y bajarse el rol deja la instalación sin
+    // admin). Ofrecer botones que siempre fallan sería mentir.
+    if (u.id === miId) {
+      cuerpo.appendChild(
+        filaCeldas([
+          u.nombre,
+          u.email,
+          u.rol,
+          "— tu cuenta, se gestiona desde tu perfil —",
+          "",
+        ]),
+      );
+      continue;
+    }
+    cuerpo.appendChild(
+      filaCeldas([
+        u.nombre,
+        // Sin confirmar no se puede entrar: es una cuenta muerta y conviene que
+        // se note al mirar la lista.
+        u.email_verificado ? u.email : `${u.email} (sin confirmar)`,
+        u.rol,
+        boton(esAdmin ? "Quitar admin" : "Hacer admin", "sec", () =>
+          confirmando(
+            esAdmin
+              ? `¿Quitar el rol de administrador a ${u.nombre}?`
+              : `¿Hacer administrador a ${u.nombre}?`,
+            () =>
+              api(`/usuarios/${u.id}`, {
+                method: "PATCH",
+                json: { rol: esAdmin ? "usuario" : "admin" },
+              }),
+            cargarAdminUsuarios,
+          ),
+        ),
+        boton("Borrar", "ghost", () =>
+          confirmando(
+            `¿Borrar la cuenta de ${u.nombre}? Sus tickets se desvinculan, así que sus precios se conservan. No se puede deshacer.`,
+            () => api(`/usuarios/${u.id}`, { method: "DELETE" }),
+            cargarAdminUsuarios,
+          ),
+        ),
+      ]),
+    );
+  }
+  tabla.appendChild(cuerpo);
+  if (!lista.length) tabla.appendChild(filaCeldas(["Ninguna cuenta con ese texto"]));
+}
+
+$("admin-q-usuarios").addEventListener("input", pintarAdminUsuarios);
+
+let productosAdmin = [];
+
+async function cargarAdminProductos() {
+  productosAdmin = await api("/productos");
+  pintarAdminProductos();
+}
+
+function pintarAdminProductos() {
+  const tabla = $("tabla-productos");
+  const q = $("admin-q-productos").value.trim();
+  const lista = productosAdmin.filter((p) =>
+    filtrar(q, [p.nombre_normalizado, p.categoria, p.unidad_medida]),
+  );
+
+  tabla.replaceChildren(cabecera(["Nombre", "Categoría", "Unidad", "", ""]));
+  const cuerpo = document.createElement("tbody");
+  for (const p of lista) cuerpo.appendChild(filaProducto(p));
+  tabla.appendChild(cuerpo);
+  if (!lista.length) tabla.appendChild(filaCeldas(["Ningún producto con ese texto"]));
+}
+
+function filaProducto(p) {
+  return filaCeldas([
+    p.nombre_normalizado,
+    p.categoria || "—",
+    p.unidad_medida || "—",
+    boton("Editar", "sec", (e) => {
+      e.target.closest("tr").replaceWith(filaProductoEditable(p));
+    }),
+    boton("Borrar", "ghost", () =>
+      confirmando(
+        `¿Borrar «${p.nombre_normalizado}» del catálogo?`,
+        () => api(`/productos/${p.id}`, { method: "DELETE" }),
+        cargarAdminProductos,
+      ),
+    ),
+  ]);
+}
+
+// Se edita en la propia fila: abrir otra pantalla para cambiar tres campos
+// obliga a perder de vista la lista que se está repasando.
+function filaProductoEditable(p) {
+  const campo = (valor, etiqueta) => {
+    const input = document.createElement("input");
+    input.value = valor || "";
+    input.setAttribute("aria-label", etiqueta);
+    return input;
+  };
+  const nombre = campo(p.nombre_normalizado, "Nombre");
+  const categoria = campo(p.categoria, "Categoría");
+  const unidad = campo(p.unidad_medida, "Unidad de medida");
+
+  const fila = filaCeldas([
+    nombre,
+    categoria,
+    unidad,
+    boton("Guardar", null, async () => {
+      if (!nombre.value.trim()) {
+        mensaje("El nombre no puede quedar vacío", true);
+        return;
+      }
+      try {
+        await api(`/productos/${p.id}`, {
+          method: "PATCH",
+          json: {
+            nombre_normalizado: nombre.value.trim(),
+            // Vaciar el campo es querer quitar el dato, y la API acepta null.
+            categoria: categoria.value.trim() || null,
+            unidad_medida: unidad.value.trim() || null,
+          },
+        });
+        await cargarAdminProductos();
+        mensaje("Producto actualizado");
+      } catch (err) {
+        mensaje(err.message, true);
+      }
+    }),
+    boton("Cancelar", "sec", () => fila.replaceWith(filaProducto(p))),
+  ]);
+  return fila;
+}
+
+$("admin-q-productos").addEventListener("input", pintarAdminProductos);
+
+async function cargarAdminSupers() {
+  const supers = await api("/supermercados");
+  const tabla = $("tabla-supermercados");
+  tabla.replaceChildren(cabecera(["Nombre", "", ""]));
+  const cuerpo = document.createElement("tbody");
+  for (const sm of supers) cuerpo.appendChild(filaSuper(sm));
+  tabla.appendChild(cuerpo);
+}
+
+function filaSuper(sm) {
+  return filaCeldas([
+    sm.nombre,
+    boton("Editar", "sec", (e) => {
+      e.target.closest("tr").replaceWith(filaSuperEditable(sm));
+    }),
+    boton("Borrar", "ghost", () =>
+      confirmando(
+        `¿Borrar el supermercado «${sm.nombre}»?`,
+        () => api(`/supermercados/${sm.id}`, { method: "DELETE" }),
+        cargarAdminSupers,
+      ),
+    ),
+  ]);
+}
+
+function filaSuperEditable(sm) {
+  const nombre = document.createElement("input");
+  nombre.value = sm.nombre;
+  nombre.setAttribute("aria-label", "Nombre del supermercado");
+
+  const fila = filaCeldas([
+    nombre,
+    boton("Guardar", null, async () => {
+      if (!nombre.value.trim()) {
+        mensaje("El nombre no puede quedar vacío", true);
+        return;
+      }
+      try {
+        await api(`/supermercados/${sm.id}`, {
+          method: "PATCH",
+          json: { nombre: nombre.value.trim() },
+        });
+        await cargarAdminSupers();
+        await cargarSupermercados();
+        mensaje("Supermercado actualizado");
+      } catch (err) {
+        mensaje(err.message, true);
+      }
+    }),
+    boton("Cancelar", "sec", () => fila.replaceWith(filaSuper(sm))),
+  ]);
+  return fila;
 }
 
 // ---- Cesta habitual (FR10) ----

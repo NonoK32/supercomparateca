@@ -24,11 +24,17 @@
     <button class="tab" role="tab" data-panel="panel-tickets" aria-selected="false">
       <span class="icono" aria-hidden="true">≡</span>Tickets
     </button>
-    <button class="tab" role="tab" data-panel="panel-comparar" aria-selected="false">
-      <span class="icono" aria-hidden="true">⇅</span>Comparar
+    <button class="tab" role="tab" data-panel="panel-productos" aria-selected="false">
+      <span class="icono" aria-hidden="true">⇅</span>Productos
     </button>
     <button class="tab" role="tab" data-panel="panel-cesta" aria-selected="false">
       <span class="icono" aria-hidden="true">∑</span>Cesta
+    </button>
+    <!-- Solo para administradores: app.js lo destapa según GET /auth/me. Es
+         cosmético, no una protección — cada endpoint comprueba el rol. -->
+    <button class="tab hidden" id="tab-admin" role="tab" data-panel="panel-admin"
+            aria-selected="false">
+      <span class="icono" aria-hidden="true">§</span>Admin
     </button>
   </nav>
 
@@ -122,6 +128,18 @@
         <div class="card" id="card-subir">
           <h2>Subir ticket</h2>
           <p class="muted">El supermercado y la fecha se leen del propio ticket.</p>
+
+          <!-- Cómo entra el ticket. El botón de la cámara nace oculto y solo lo
+               enseña app.js si el navegador la ofrece: sin HTTPS (o en un http://
+               que no sea localhost) getUserMedia ni siquiera existe, y un botón
+               que no puede funcionar es peor que no tenerlo. -->
+          <div class="modos" role="group" aria-label="Cómo quieres subir el ticket">
+            <button type="button" class="sec modo" id="modo-archivo"
+                    aria-pressed="true">Subir archivo</button>
+            <button type="button" class="sec modo hidden" id="modo-camara"
+                    aria-pressed="false">Escanear con la cámara</button>
+          </div>
+
           <form id="form-ticket">
             <!-- El input real vive dentro de la etiqueta: sigue siendo un
                  <input type=file> de verdad (accesible, enfocable, con la
@@ -129,14 +147,40 @@
             <label class="zona-foto" id="zona-foto">
               <!-- Sin `required`: el navegador ancla su globo de validación al
                    campo, que aquí está oculto. Lo comprueba el JS y avisa. -->
+              <!-- `multiple`: un ticket largo no cabe en una foto y se sube en
+                   varias, que el api lee como un único documento. -->
               <input type="file" id="ticket-imagen" class="input-archivo"
-                     accept="image/*">
-              <img id="foto-previa" class="foto-previa hidden"
-                   alt="Foto del ticket elegida">
+                     accept="image/*,application/pdf" multiple>
+              <!-- Las páginas elegidas, en tira y en orden. Los PDF salen como
+                   nombre: un <img> no sabe pintarlos. -->
+              <div class="capturas hidden" id="capturas"></div>
               <span class="zona-titulo" id="zona-titulo">Pegar aquí el ticket</span>
-              <span class="zona-pista" id="zona-pista">Toca para elegir la foto · o arrástrala</span>
+              <span class="zona-pista" id="zona-pista">Toca para elegir las fotos o el PDF · o arrástralos</span>
             </label>
-            <button type="submit">Procesar ticket</button>
+
+            <!-- Escanear en vivo. El fotograma capturado se mete en el input de
+                 arriba, así que a partir de ahí no se distingue de una foto
+                 elegida a mano: misma previa, mismo envío. -->
+            <div class="zona-camara hidden" id="zona-camara">
+              <!-- `playsinline` y `muted` o iOS abre el vídeo a pantalla
+                   completa en vez de dejarlo dentro de la página. -->
+              <video id="camara-video" playsinline muted
+                     aria-label="Vista de la cámara"></video>
+              <!-- Lleva la cuenta de las capturas: con la cámara abierta no se
+                   ven las miniaturas y si no se dice, no se sabe por dónde vas. -->
+              <span class="zona-pista" id="camara-pista"
+                    role="status">Encuadra el ticket entero y pulsa Capturar</span>
+            </div>
+
+            <!-- La cámara no se cierra al capturar: un ticket largo se hace a
+                 trozos y volver a abrirla en cada página es esperar a que
+                 arranque otra vez. Se sale con Terminar. -->
+            <div class="botones-camara hidden" id="botones-camara">
+              <button type="button" id="btn-capturar">Capturar</button>
+              <button type="button" id="btn-terminar-camara" class="sec" disabled>Terminar</button>
+            </div>
+
+            <button type="submit" id="btn-procesar">Procesar ticket</button>
           </form>
         </div>
 
@@ -181,16 +225,42 @@
         </div>
       </div>
 
-      <div class="panel hidden" id="panel-comparar" role="tabpanel">
+      <div class="panel hidden" id="panel-productos" role="tabpanel">
         <div class="card">
-          <h2>Comparar precios</h2>
-          <p class="muted">Dónde sale más barato, según los tickets de todos.</p>
+          <h2>Productos</h2>
+          <p class="muted">Busca uno y mira dónde sale más barato, según los tickets de todos.</p>
+
+          <!-- Buscador con sugerencias. Es un combobox de verdad (ARIA), no un
+               <input> con una lista al lado: sin los roles y aria-activedescendant
+               un lector de pantalla no anuncia lo que se va resaltando. -->
+          <div class="campo buscador">
+            <label for="busca-a">Producto</label>
+            <input type="search" id="busca-a" autocomplete="off"
+                   placeholder="escribe para buscar…"
+                   role="combobox" aria-expanded="false" aria-controls="sug-a"
+                   aria-autocomplete="list">
+            <ul class="sugerencias hidden" id="sug-a" role="listbox"
+                aria-label="Sugerencias"></ul>
+          </div>
+
+          <!-- El segundo producto no existe hasta que se pide comparar: en el
+               caso normal (mirar un precio) solo estorbaría. -->
+          <div class="campo buscador hidden" id="campo-b">
+            <label for="busca-b">Comparar con</label>
+            <input type="search" id="busca-b" autocomplete="off"
+                   placeholder="escribe para buscar…"
+                   role="combobox" aria-expanded="false" aria-controls="sug-b"
+                   aria-autocomplete="list">
+            <ul class="sugerencias hidden" id="sug-b" role="listbox"
+                aria-label="Sugerencias"></ul>
+          </div>
+
           <div class="fila">
-            <select id="sel-producto" aria-label="Producto"></select>
-            <button id="btn-comparar" type="button">Comparar</button>
+            <button id="btn-comparar-otro" type="button" disabled>Comparar con otro</button>
+            <button id="btn-quitar-b" type="button" class="sec hidden">Quitar</button>
           </div>
         </div>
-        <!-- El resultado se imprime aquí como un ticket (ver mostrarComparativa). -->
+        <!-- El resultado se imprime aquí como un ticket (ver pintarProductos). -->
         <div id="resultado-precios"></div>
       </div>
 
@@ -206,6 +276,47 @@
           </div>
         </div>
         <div id="resultado-cesta"></div>
+      </div>
+
+      <!-- Panel de administración. Se destapa según el rol que diga
+           GET /auth/me; la protección de verdad está en el api, que comprueba
+           el rol en cada endpoint. -->
+      <div class="panel hidden" id="panel-admin" role="tabpanel">
+        <div class="card">
+          <h2>Cuentas</h2>
+          <p class="muted">
+            Borrar una cuenta <strong>no borra sus precios</strong>: sus tickets se
+            desvinculan y siguen alimentando la comparativa de todos.
+          </p>
+          <input type="search" id="admin-q-usuarios" autocomplete="off"
+                 placeholder="filtrar por nombre o correo"
+                 aria-label="Filtrar cuentas">
+          <div class="tabla-scroll">
+            <table id="tabla-usuarios"></table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Productos</h2>
+          <p class="muted">
+            El catálogo común. Un producto en uso por alguna línea de ticket no se
+            puede borrar.
+          </p>
+          <input type="search" id="admin-q-productos" autocomplete="off"
+                 placeholder="filtrar por nombre"
+                 aria-label="Filtrar productos">
+          <div class="tabla-scroll">
+            <table id="tabla-productos"></table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Supermercados</h2>
+          <p class="muted">Uno con tickets asociados no se puede borrar.</p>
+          <div class="tabla-scroll">
+            <table id="tabla-supermercados"></table>
+          </div>
+        </div>
       </div>
 
       <!-- Zona de baja. Va en un pie, fuera de las pestañas, para que el
