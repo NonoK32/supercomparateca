@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
@@ -69,6 +70,26 @@ class UsuarioRead(BaseModel):
     email: EmailStr
     rol: str
     fecha_registro: datetime
+
+
+class UsuarioAdminRead(UsuarioRead):
+    """Lo que ve un admin en el panel.
+
+    Añade si la cuenta llegó a confirmar el correo: sin confirmar no se puede
+    entrar, así que son cuentas muertas y es lo primero que se quiere ver.
+    """
+
+    email_verificado: bool
+
+
+class UsuarioUpdate(BaseModel):
+    """Lo único que un admin cambia de la cuenta de otro es el rol.
+
+    El nombre y el correo son de su dueño, y la contraseña no la puede saber
+    nadie: para eso está la recuperación.
+    """
+
+    rol: Literal["usuario", "admin"]
 
 
 class Token(BaseModel):

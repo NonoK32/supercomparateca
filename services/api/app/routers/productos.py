@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -30,8 +30,28 @@ def crear(payload: schemas.ProductoCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=list[schemas.ProductoRead])
-def listar(db: Session = Depends(get_db)):
-    return list(db.scalars(select(models.Producto)).all())
+def listar(
+    q: str | None = None,
+    limite: int | None = Query(default=None, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """El catálogo. Con `q` filtra por nombre, que es lo que alimenta el
+    buscador con sugerencias del frontend.
+
+    Sin parámetros devuelve todo, como siempre: el panel de admin y el
+    desplegable de asociar líneas necesitan el catálogo entero.
+    """
+    consulta = select(models.Producto).order_by(models.Producto.nombre_normalizado)
+    if q:
+        # `%` y `_` son comodines de LIKE: sin escaparlos, buscar "50%" lista
+        # cualquier cosa. `escape` es lo que hace que el \ signifique "literal".
+        patron = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        consulta = consulta.where(
+            models.Producto.nombre_normalizado.ilike(f"%{patron}%", escape="\\")
+        )
+    if limite:
+        consulta = consulta.limit(limite)
+    return list(db.scalars(consulta).all())
 
 
 @router.get("/{producto_id}", response_model=schemas.ProductoRead)

@@ -57,3 +57,47 @@ def test_no_se_puede_eliminar_producto_en_uso(client, fake_ocr):
         json={"nuevo_producto": {"nombre_normalizado": "Leche desnatada 1L"}},
     ).json()
     assert client.delete(f"/productos/{asoc['producto_id']}").status_code == 409
+
+
+# ---- Buscador (el que alimenta las sugerencias del frontend) ----
+def _catalogo(client, *nombres):
+    for nombre in nombres:
+        client.post("/productos", json={"nombre_normalizado": nombre})
+
+
+def test_buscar_por_trozo_del_nombre(client):
+    _catalogo(client, "Leche desnatada 1L", "Leche entera 1L", "Pan de molde")
+
+    nombres = [p["nombre_normalizado"] for p in client.get("/productos?q=leche").json()]
+
+    assert nombres == ["Leche desnatada 1L", "Leche entera 1L"]
+
+
+def test_buscar_no_distingue_mayusculas_y_busca_por_dentro(client):
+    _catalogo(client, "Leche desnatada 1L", "Pan de molde")
+
+    assert len(client.get("/productos?q=DESNATADA").json()) == 1
+    # Por dentro, no solo por el principio: se escribe lo que uno recuerda.
+    assert len(client.get("/productos?q=molde").json()) == 1
+
+
+def test_sin_q_devuelve_el_catalogo_entero(client):
+    # El panel de admin y el desplegable de asociar lo necesitan completo.
+    _catalogo(client, "Leche desnatada 1L", "Pan de molde")
+
+    assert len(client.get("/productos").json()) == 2
+
+
+def test_el_limite_recorta_las_sugerencias(client):
+    _catalogo(client, "Leche 1", "Leche 2", "Leche 3")
+
+    assert len(client.get("/productos?q=leche&limite=2").json()) == 2
+
+
+def test_los_comodines_de_like_no_son_comodines(client):
+    # Sin escapar, buscar "%" listaría el catálogo entero y "_" cualquier letra.
+    _catalogo(client, "Leche desnatada 1L", "Cacao 50% menos azucar")
+
+    assert len(client.get("/productos?q=%25").json()) == 1  # %25 es "%"
+    assert client.get("/productos?q=%25").json()[0]["nombre_normalizado"].startswith("Cacao")
+    assert client.get("/productos?q=lech_").json() == []

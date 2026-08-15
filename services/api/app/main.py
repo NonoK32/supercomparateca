@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routers import auth, cesta, lineas, productos, supermercados, tickets
+from .routers import auth, cesta, lineas, productos, supermercados, tickets, usuarios
 
 # El esquema NO se crea al arrancar: lo gestiona Alembic (`alembic upgrade
 # head`, que el contenedor ejecuta en su entrypoint). Con `create_all` aquí, un
@@ -29,3 +29,4 @@ app.include_router(productos.router)
 app.include_router(tickets.router)
 app.include_router(lineas.router)
 app.include_router(cesta.router)
+app.include_router(usuarios.router)

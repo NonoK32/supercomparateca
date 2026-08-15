@@ -2,11 +2,11 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import correo, google_auth, models, schemas, seguridad
+from .. import correo, cuentas, google_auth, models, schemas, seguridad
 from ..config import settings
 from ..database import get_db
 from ..turnstile import TurnstileClient, get_turnstile_client
@@ -333,6 +333,19 @@ def restablecer_password(
     return schemas.Token(access_token=seguridad.crear_token(usuario.id))
 
 
+@router.get("/me", response_model=schemas.UsuarioRead)
+def quien_soy(usuario: models.Usuario = Depends(seguridad.get_current_user)):
+    """Quién es el dueño del token.
+
+    El frontend lo necesita para saber si pintar el panel de admin. Que el rol
+    lo diga el servidor y no el propio token es a propósito: un rol retirado
+    tiene efecto en la siguiente petición, sin esperar a que caduque la sesión.
+    Y esconder el panel no protege nada por sí solo —cada endpoint de admin
+    comprueba el rol otra vez—, solo evita enseñar botones que darían 403.
+    """
+    return usuario
+
+
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 def borrar_mi_cuenta(
     payload: schemas.BorrarCuenta,
@@ -341,15 +354,8 @@ def borrar_mi_cuenta(
 ):
     """Derecho de supresión (art. 17 RGPD): el usuario borra su propia cuenta.
 
-    Los **tickets no se borran, se desvinculan** (`usuario_id = NULL`). Los
-    precios son un bien compartido: eliminarlos degradaría la comparativa de
-    todos los demás, y una vez sin dueño dejan de ser datos personales. Nadie
-    vuelve a tener acceso a ellos, porque `_ticket_propio` exige coincidencia
-    de usuario y NULL no coincide con nadie.
-
-    Los **alias sí se borran**: son aprendizaje personal, no histórico de
-    precios, y no hay nada que dependa de ellos (las líneas apuntan al
-    producto, no al alias).
+    Qué se conserva y qué se destruye está en `cuentas.borrar` (lo comparte con
+    el borrado desde el panel de admin).
 
     Se pide la contraseña porque la acción es irreversible y no debería
     bastar con un token robado.
@@ -379,15 +385,5 @@ def borrar_mi_cuenta(
                 "Eres el único administrador: nombra a otro antes de borrar tu cuenta.",
             )
 
-    db.execute(
-        update(models.Ticket)
-        .where(models.Ticket.usuario_id == usuario.id)
-        .values(usuario_id=None)
-    )
-    db.execute(
-        delete(models.AliasProducto).where(
-            models.AliasProducto.usuario_id == usuario.id
-        )
-    )
-    db.delete(usuario)
+    cuentas.borrar(db, usuario)
     db.commit()
